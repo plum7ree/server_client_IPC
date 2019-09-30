@@ -7,22 +7,60 @@
 #include <errno.h>
 #include <string.h>
 #include <semaphore.h>
+#include <mqueue.h>
 
-#include "tinyipc.h"
+#include "TinyFile.h"
 
 
 // link with -lrt -pthread
+
+
+size_t fread_buf( void* ptr, size_t size, FILE* stream)
+{
+    return fread( ptr, 1, size, stream);
+}
+
+
+size_t fwrite_buf( void const* ptr, size_t size, FILE* stream)
+{
+    return fwrite( ptr, 1, size, stream);
+}
+
 
 int
 main(int argc, char *argv[])
 {   
     int r;
     int fd;
-    size_t len = LEN;
+    size_t len = SEGSIZE;
     char *addr;
     char *buff = malloc(len);
     /* Size of shared memory object */
+    FILE * pFile;
     sem_t *sem, *sem_modif;
+
+    // int pid = getpid();
+    // printf("client pid: %d", pid);
+
+
+
+    // mqd_t mqfd = mq_open(MQPATH, O_WRONLY, 0666, NULL);
+    // if(mqfd == -1) {
+    //     perror("Child mq_open failure");
+    //     exit(0);
+    // }
+
+    // char *msgbuff = malloc(MSGSIZE);
+    // sprintf(msgbuff, "%d", pid);
+
+    // int status = mq_send(mqfd, msgbuff, MSGSIZE, 0);
+    // if (status == -1) {
+    //     perror("mq_send failure\n");
+    // }
+    // mq_close(mqfd);
+    // printf("Child process done\n");
+
+    // return 0;
 
     sem = sem_open(SEMPATH , O_RDWR,0);
     sem_modif = sem_open(SEMPATH2 , O_RDWR,S_IRUSR | S_IWUSR);
@@ -49,19 +87,26 @@ main(int argc, char *argv[])
     // sem_getvalue(sem_modif, &value);
     // printf("sem val: %d", value);
 
+    pFile = fopen(filepath, "rb");
+    if (pFile==NULL) {
+        fputs ("File error",stderr); 
+        exit (1);
+    }
+    // obtain file size:
+    fseek (pFile , 0 , SEEK_END);
+    lSize = ftell (pFile);
+    rewind (pFile);
 
     while(1) {
         sem_wait(sem);
-        scanf("%s", buff);
-        printf("start to copying: %s\n", buff);
-        fflush(stdout);
-        // buff = "a";
-        memcpy(addr, buff, len); /* Copy string to shared memory */ 
-        printf("string copied:");
-        fflush(stdout);
+
+        fread_buf(addr, len, pFile);
+        // msync(map, textsize, MS_SYNC); // when write to a file
         r = sem_post(sem_modif);
-        if (r==-1)
-            perror("sem post sem_modif");
+        if (cumSize == fileSzie) {
+            fclose(pFile);
+            break;
+        }
 
     }
 
@@ -73,3 +118,5 @@ main(int argc, char *argv[])
         perror("close"); /* 'fd' is no longer needed */
     exit(EXIT_SUCCESS);
 }
+
+
