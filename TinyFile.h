@@ -1,6 +1,7 @@
 #define SHMPATH "/shm_obj1" // naming convention: /somename. Not ./somename
 #define SEMPATH "/sem_obj1"
 #define SEMPATH2 "/sem_obj2"
+#define SEMPATH3 "/sem_obj3"
 #define MQPATH "/mq_obj1"
 
 #define SEGSIZE 10
