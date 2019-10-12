@@ -1,6 +1,6 @@
-## server_client_IPC
+### server_client_IPC
 
-#protocol
+##protocol
 
 server creates: one global message queue, one sharedmem, one global semaphore
 
@@ -16,7 +16,7 @@ client creates : two private message queue, two private semaphore -> send pid to
 
 
 
-#compile
+##compile
 
 make server; //for server
 make client; //for client
