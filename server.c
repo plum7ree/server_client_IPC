@@ -63,10 +63,9 @@ int clientHandler(void *arg) {
 
 
     int filenumber;
-    int filesize;
-    int chunksize = 0;
-    int cumsize = 0;
-    char filechunk[SEGSIZE];
+    unsigned long filesize;
+    unsigned long chunksize = 0;
+    unsigned long cumsize = 0;
 
     // recieve first message : fist msg :| filenumber(4) | filesize(4)  |
     char msgbuff[MSGSIZE_PRIVATE];
@@ -75,31 +74,24 @@ int clientHandler(void *arg) {
         perror("receiving first msg failure\n");
     }
 
-    char header_fno[HEADER_FNO];
-    memcpy(header_fno, msgbuff, HEADER_FNO);
-    filenumber = atoi(header_fno); 
+    filenumber = *((int *)msgbuff); 
 
-    char header_fsz[HEADER_FNO];
-    memcpy(header_fsz, msgbuff + HEADER_FNO, HEADER_FSZ);
-    filesize = atoi(header_fsz); 
+    filesize = *((unsigned long *)(msgbuff + HEADER_FNO)); 
 
     char *temp_storage = malloc(filesize); 
 
 
     // start read file chunk and store
     while(cumsize < filesize) {
-        // real chunk info : | filenumber(4) | chunksize(4) |
+        // real chunk info : | filenumber(4) : int | chunksize(8)  :unsigned long |
         int status = mq_receive(mqfd_to_serv, msgbuff, MSGSIZE_PRIVATE, 0);
         if (status == -1) {
             perror("receiving file chunk msg failure\n");
         }
 
-        memcpy(header_fno, msgbuff, HEADER_FNO);
-        filenumber = atoi(header_fno); 
+        filenumber = *((int *)msgbuff); 
 
-        char header_chunk[HEADER_FSZ];
-        memcpy(header_chunk, msgbuff + HEADER_FNO, HEADER_CHUNK);
-        chunksize = atoi(header_chunk);
+        chunksize = *((unsigned long *)(msgbuff + HEADER_FNO));
 
 
         sem_wait(sem_global);
@@ -107,7 +99,7 @@ int clientHandler(void *arg) {
         sem_wait(sem_modif);
 
 
-        memcpy(filechunk + cumsize, shm_info.addr, chunksize);
+        memcpy(temp_storage + cumsize, shm_info.addr, chunksize);
 
         cumsize += chunksize;
 

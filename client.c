@@ -136,6 +136,44 @@ void connectToServer(client_mqfd_t *mqfd, client_sem_t *clsem) {
 // sem_t *sem, *sem_modif, *sem_allow_transf;
 // client_mqfd_t client_mqfd;
 
+void sendFile(char *path, mqd_t *mqfd, client_sem_t *clsem) {
+
+    char tempbuff[SEGSIZE];
+
+    pFile = fopen(path, "rb");
+    if (pFile==NULL) {
+        perror("file open error!\n");
+    }
+    // obtain file size:
+    fseek (pFile , 0 , SEEK_END);
+    long fileSize = ftell (pFile);
+    sprintf(tempbuff, "%lu", fileSize);
+    rewind (pFile);
+    printf("file size: %lu\n", fileSize);
+
+
+
+    
+    int chunksize = fread_buf(tempbuff, SEGSIZE, pFile);
+
+    mq_send(mqfd->mqfd_to_server , msgbuff, MSGSIZE_PRIVATE);
+
+    sem_wait(clsem->sem_allow_transf);
+    while(cumsize < filesize) {
+        memcpy(tempbuff, shm_info.addr, chunksize)
+    }
+
+
+
+    memset(shm_info.addr, 0, SEGSIZE);
+    int chunksize = fread_buf(shm_info.addr, SEGSIZE, pFile);
+
+    cumsize += chunksize;
+        
+
+    sem_post(clsem->sem_modif);
+
+}
 
 int
 main(int argc, char *argv[])
@@ -147,6 +185,8 @@ main(int argc, char *argv[])
     initClient(&shm_info, &clsem, &mqfd);
 
     connectToServer(&mqfd, &clsem);
+
+    sendFile();
 
     /****************************** msg queue ******************************************/
     // int pid = getpid();
