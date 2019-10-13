@@ -120,6 +120,12 @@ void connectToServer(client_mqfd_t *mqfd, client_sem_t *clsem) {
     }
     printf("message with pid:%d has been sent to global queue\n",pid);
 
+
+    char msgbuff_from_server[MSGSIZE_PRIVATE];
+    // wait until server responsd. IF we do not have this, server's mq_open(mqfd_to_server) happens later than file transfer.
+    // and server doesn't respond at all.
+    mq_receive(mqfd->mqfd_from_server,msgbuff_from_server ,MSGSIZE_PRIVATE,0);
+
 }
 
 
@@ -135,7 +141,7 @@ void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_
     char msgbuff[MSGSIZE_PRIVATE];
     char chunkbuff[SEGSIZE];
     FILE *pFile;
-    int cumsize = 0;
+    unsigned long cumsize = 0;
 
     pFile = fopen(path, "rb");
     if (pFile==NULL) {
@@ -152,30 +158,34 @@ void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_
 
     // protocol : | filenumber (4bytes) | filesize (8) |
     *((int *)msgbuff) = filenumber;
-    *((unsigned long *)msgbuff + HEADER_FNO) = filesize;
+    *((unsigned long *)(msgbuff + HEADER_FNO)) = filesize;
 
     int status = mq_send(mqfd->mqfd_to_server , msgbuff, MSGSIZE_PRIVATE,0);
     if (status == -1) {
         perror("mq_send failure\n");
     }
     printf("first msg sent!\n");
-    
 
     while(cumsize < filesize) {
+
         unsigned long chunksize = fread_buf(chunkbuff, SEGSIZE, pFile);
         *((int *)msgbuff) = filenumber;
-        *((unsigned long *)msgbuff + HEADER_FNO) = chunksize;
+        *((unsigned long *)(msgbuff + HEADER_FNO)) = chunksize;  // enclose (msgbuff + HEADER_FNO) is important
+
+        // filenumber = *((int *)msgbuff); 
+        // chunksize = *((unsigned long *)(msgbuff + HEADER_FNO));
+        // printf("checking buffer: file number: %d chunksize: %lu\n", filenumber, chunksize);
 
         int status = mq_send(mqfd->mqfd_to_server , msgbuff, MSGSIZE_PRIVATE,0);
         if (status == -1) {
             perror("mq_send failure\n");
         }
-        printf("chunk msg sent!\n");
+        
 
         sem_wait(clsem->sem_allow_transf);
         memset(shm_info->addr, 0, SEGSIZE);
         memcpy(shm_info->addr, chunkbuff, chunksize);
-        printf("file sent! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
+        printf("file sent! filenumber: %d chunksize: %lu cumsize: %lu\n", filenumber, chunksize, cumsize);
         sem_post(clsem->sem_modif);
 
         cumsize += chunksize;
@@ -195,7 +205,7 @@ main(int argc, char *argv[])
 
     connectToServer(&mqfd, &clsem);
 
-    int filenumber = 0;
+    int filenumber = 10;
     char *filepath = "README.md";
 
     sendFile(filepath, &shm_info, &mqfd, &clsem, filenumber);

@@ -91,9 +91,19 @@ int clientHandler(void *arg) {
     unsigned long chunksize = 0;
     unsigned long cumsize = 0;
 
-    // recieve first message : fist msg :| filenumber(4) | filesize(4)  |
+
+
+
+    
     char msgbuff[MSGSIZE_PRIVATE];
-    int status = mq_receive(mqfd_to_serv, msgbuff, MSGSIZE_PRIVATE, 0);
+    // tell client server is ready to recieve with just empty msg
+    int status = mq_send(mqfd_from_serv, msgbuff, MSGSIZE_PRIVATE, 0);
+    if (status == -1) {
+        perror("sending to client with mqfd_from_serv failure\n");
+    }
+
+    // recieve first message from client : fist msg :| filenumber(4) | filesize(4)  |
+    status = mq_receive(mqfd_to_serv, msgbuff, MSGSIZE_PRIVATE, 0);
     if (status == -1) {
         perror("receiving first msg failure\n");
     }
@@ -101,7 +111,7 @@ int clientHandler(void *arg) {
     filenumber = *((int *)msgbuff); 
 
     filesize = *((unsigned long *)(msgbuff + HEADER_FNO)); 
-    printf("new file request recved! filenumber: %d filesize: %lu", filenumber, filesize);
+    printf("new file request recved! filenumber: %d filesize: %lu\n", filenumber, filesize);
 
     char *temp_storage = malloc(filesize); 
 
@@ -117,15 +127,18 @@ int clientHandler(void *arg) {
         filenumber = *((int *)msgbuff); 
 
         chunksize = *((unsigned long *)(msgbuff + HEADER_FNO));
-
+        printf("got msg chunk! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
 
         sem_wait(sem_global);
+        printf("1\n");
         sem_post(sem_allow_transf);
+        printf("1\n");
         sem_wait(sem_modif);
+        printf("1\n");
 
 
         memcpy(temp_storage + cumsize, shm_info.addr, chunksize);
-        printf("got file! filenumber: %d chunksize: %lu", filenumber, chunksize);
+        printf("got file! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
         cumsize += chunksize;
 
         sem_post(sem_global);
@@ -176,6 +189,10 @@ void initTinyServer(mqd_t *mqfd, char **addr) {
         perror("sem global failed\n");
         exit(0);
     }
+    sem_init(sem_global, 0, 1); 
+    int val;
+    sem_getvalue(sem_global, &val);
+    printf("sem_global init vale: %d\n", val);
 
     int fd = shm_open(SHMPATH, O_RDWR| O_CREAT, S_IRUSR | S_IWUSR); /* Open existing object */ 
     
