@@ -65,21 +65,6 @@ typedef struct shm_info {
 } shm_info_t;
 
 
-// typedef struct file_info {
-//     int filenumber;
-//     int filesize;
-//     char *temp_storage;
-// } file_info_t
-
-// typedef struct file_info_all {
-    
-
-
-// } file_info_all_t
-
-
-// file_info_t file_info_array[MAX_STORAGE];
-
 
 size_t fwrite_buf( void const* ptr, size_t size, FILE* stream);
 size_t fread_buf( void* ptr, size_t size, FILE* stream);

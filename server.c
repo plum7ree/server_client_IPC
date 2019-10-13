@@ -1,4 +1,6 @@
-
+#define _GNU_SOURCE 
+#include <sched.h>
+#include <sys/stat.h>
 #include "./snappy-c/snappy.h"
 #include "./snappy-c/map.h"
 #include "./snappy-c/util.h"
@@ -20,54 +22,28 @@ shm_info_t shm_info;
 
 
 
-void run_file_transfer (void *arg) {
-    char *msg = ((struct clone_arg *)arg)->msg;
-    // mqd_t clientq = mq_open(msgbuff, O_RDWR, 0666, &attr);
-    // volatile int i = 0;
-    // volatile int a = 2;
-    // volatile int b = 1;
-    // for (;i< 10000000; i++) {
-    //     a = a + b + 1;
-    // }
-    // printf("msg: %s, a:%d", msg, a);
-    // fflush(stdout);
 
-    // 1. "/sem_client_pid" ex) /sem3771
-    // mq_open(/sem3771)
-    // 
+int compressFile(char *input, int filesize, char **output) {
+    /************************************ Snappy Setting *************************************************/
+    char *outbuffer = xmalloc(snappy_max_compressed_length(filesize));
+    size_t outlen = snappy_max_compressed_length(filesize);
+    struct snappy_env env;
+    snappy_init_env(&env);
 
+    int err = snappy_compress(&env, input, (size_t) filesize, outbuffer, &outlen);       
+    if (err) {
+        free(outbuffer);
+        printf("compression of failed:\n");
+        return 0;
+    }
 
+    *output = outbuffer;
+    snappy_free_env(&env);
 
-    return;
+    return 1;
 }
 
-// int searchFile(int filenumber) {
-//     for(int i = 0; i < MAX_STORAGE; i++) {
-//         if(file_info_array[i].filenumber == filenumber) {
-//             return 1;
-//         }
-//     }
-
-//     return 0;
-// }
-
-// int createNewFileInfo(int filenumber, int filesize) {
-//     // recieve first message : fist msg :| filenumber(4) | filesize(4)  |
-
-
-//     // create storage buffer in memory, don't forget to free later!!!!
-//     file_info_t *file_info = malloc(sizeof(file_info_t));
-//     file_info->filenumber = filenumber;
-//     file_info->filesize = filesize;
-//     file_info->temp_storage = malloc(filesize); 
-
-//     file_info_array
-
-//     return 1;
-
-// }
-
-void clientHandler(void *arg) {
+int clientHandler(void *arg) {
     char *pid = ((struct clone_arg *)arg)->msg;
 
     char path_mq_to_server[MSGSIZE_GLOBAL]; // path prefix size should be 4 same as MSGSIZE_GLOBAL
@@ -90,102 +66,65 @@ void clientHandler(void *arg) {
     int filesize;
     int chunksize = 0;
     int cumsize = 0;
+    char filechunk[SEGSIZE];
+
+    // recieve first message : fist msg :| filenumber(4) | filesize(4)  |
+    char msgbuff[MSGSIZE_PRIVATE];
+    int status = mq_receive(mqfd_to_serv, msgbuff, MSGSIZE_PRIVATE, 0);
+    if (status == -1) {
+        perror("receiving first msg failure\n");
+    }
+
+    char header_fno[HEADER_FNO];
+    memcpy(header_fno, msgbuff, HEADER_FNO);
+    filenumber = atoi(header_fno); 
+
+    char header_fsz[HEADER_FNO];
+    memcpy(header_fsz, msgbuff + HEADER_FNO, HEADER_FSZ);
+    filesize = atoi(header_fsz); 
+
+    char *temp_storage = malloc(filesize); 
 
 
-    // never ends until client is sending done.
-    while(1) {
+    // start read file chunk and store
+    while(cumsize < filesize) {
         // real chunk info : | filenumber(4) | chunksize(4) |
         int status = mq_receive(mqfd_to_serv, msgbuff, MSGSIZE_PRIVATE, 0);
         if (status == -1) {
-            perror("receiving first msg failure\n");
+            perror("receiving file chunk msg failure\n");
         }
 
-        char header_fno[HEADER_FNO];
         memcpy(header_fno, msgbuff, HEADER_FNO);
         filenumber = atoi(header_fno); 
 
-        // // if this is new file, create storage in memory for this file.
-        // if(!searchFile(filenumber)) {
-
-        //     char header_chunk[HEADER_FSZ];
-        //     memcpy(header_chunk, msgbuff + HEADER_FNO, HEADER_FSZ);
-        //     filesize = atoi(header_chunk);
-
-        //     if (!createNewFileInfo(filenumber, filesize)) { // there are limited number of storage for file requests.
-        //         perror("maximum number of file for storage exceeds!\n"); // client should handle maximum number of file for async
-        //     }
-        //     continue;
-        // }
-
-        char header_chunk[HEADER_CHUNK];
-        memcpy(header_chunk, msgbuff + HEADER_FNO, HEADER_FSZ);
-        chunksize = msgbuff
+        char header_chunk[HEADER_FSZ];
+        memcpy(header_chunk, msgbuff + HEADER_FNO, HEADER_CHUNK);
+        chunksize = atoi(header_chunk);
 
 
+        sem_wait(sem_global);
+        sem_post(sem_allow_transf);
+        sem_wait(sem_modif);
+
+
+        memcpy(filechunk + cumsize, shm_info.addr, chunksize);
+
+        cumsize += chunksize;
+
+        sem_post(sem_global);
 
     }
     
+    char *outbuff;
+    compressFile(temp_storage, filesize, &outbuff);
 
 
 
-
-    free(file_info->temp_storage);
-    free(file_info);
-
-
-//     sem_allow_transf = // sem only shared between one client and server
-
-    
-//     while()
-//     {
-//         sem_wait(sem_global); // shared with all clients
-
-//         // 1. read request in message queue (file name, chunk size)
-//         sem_post(sem_allow_msg)
-//         sem_wait(sem_msg_sent)
-//         msg = readMsg()
-//         filenumber
-//         chunksize = CHUNKSIZE(msg);
-
-//         if(file_info_array[filenumber].filesize == 0) {
-//             // if filenumber not exist in file_info_array:
-//             //  first packet includes filenumber, chunksize, filesize
-//             //  further packet includes filenumber, chunksize
-//             file_info_array[filenumber].filesize = FILESIZE(msg);
-//             file_info_array[filenumber].cumsize = 0;
-//             chunksize = CHUNKSIZE(msg);
-//             char *buffer = malloc(FILESIZE(msg));
-//             file_info_array[filenumber].buffer = buffer;
-//         }
-//         sem_post(sem_msg_sent)
+    free(outbuff);
+    free(temp_storage);
 
 
-//         sem_post(sem_allow_transf)
-//         sem_wait(sem_modif);
-//         char *temp_file_buffer =  file_info_array[filenumber].buffer + cumSize
-
-//         memcopy(temp_file_buffer, mmap_addr, chunksize);
-
-
-//         file_info_array[filenumber].cumsize += chunksize;
-//         totalsize = file_info_array[filenumber].filesize;
-
-//         if (cumSize >= totalsize) {
-//             break;
-//         }
-
-//     }
-
-//     compress();
-    
-
-//     sem_wait(sem_global); // server should acquire this to write to shared memory
-
-
-
-
-
-//     return;
+    return 0 ;
 }
 
 
@@ -216,16 +155,6 @@ void initTinyServer(mqd_t *mqfd, char **addr) {
         exit(0);
     }
 
-    // int status = mq_receive(mqfd, msgbuff, 1000, 0);
-    // if (status == -1) {
-    //     perror("mq_receive failure\n");
-    // }
-
-    // long fileSize = (long) atoi(msgbuff);
-    // printf("filesize: %lu\n", fileSize);
-
-    // mq_close(mqfd);
-    // mq_unlink(MQPATH);
 
     sem_global = sem_open(SEMPATH_GLOBAL , O_RDWR|O_CREAT, S_IRUSR | S_IWUSR, 0);
     if(sem_global == SEM_FAILED) {
