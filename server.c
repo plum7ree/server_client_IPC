@@ -44,23 +44,47 @@ int compressFile(char *input, int filesize, char **output) {
 }
 
 int clientHandler(void *arg) {
-    char *pid = ((struct clone_arg *)arg)->msg;
+    int clpid = *((int *)(((struct clone_arg *)arg)->msg));
+    printf("starting new thread for client pid: %d\n", clpid);
+    
 
-    char path_mq_to_server[MSGSIZE_GLOBAL]; // path prefix size should be 4 same as MSGSIZE_GLOBAL
-    char path_mq_from_server[MSGSIZE_GLOBAL];
-    char path_sem_modif[MSGSIZE_GLOBAL];
-    char path_sem_allow_transf[MSGSIZE_GLOBAL];
+    char path_mq_to_server[PRIV_MQ_PATH_SIZE]; // path prefix size should be 4 same as MSGSIZE_GLOBAL
+    char path_mq_from_server[PRIV_MQ_PATH_SIZE];
+    char path_sem_modif[PRIV_SEM_PATH_SIZE];
+    char path_sem_allow_transf[PRIV_SEM_PATH_SIZE];
 
-    sprintf(path_mq_to_server, "/%s%03d", pid, MQ_TO_SERVER_INDEX);
-    sprintf(path_mq_from_server,"/%s%03d", pid, MQ_FROM_SERVER_INDEX);
-    sprintf(path_sem_modif,"/%s%03d", pid, SEM_MODIF_INDEX);
-    sprintf(path_sem_allow_transf,"/%s%03d", pid, SEM_ALLOW_TRANSF_INDEX);
+
+    snprintf(path_mq_to_server, PRIV_MQ_PATH_SIZE,"/%0*d%0*d", (int)PATH_PID_SIZE, clpid, (int)PATH_INDEX_SIZE, (int)MQ_TO_SERVER_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    snprintf(path_mq_from_server, PRIV_MQ_PATH_SIZE, "/%0*d%0*d", (int)PATH_PID_SIZE, clpid, (int)PATH_INDEX_SIZE, (int)MQ_FROM_SERVER_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    snprintf(path_sem_modif,PRIV_SEM_PATH_SIZE, "/%0*d%0*d", (int)PATH_PID_SIZE, clpid, (int)PATH_INDEX_SIZE, (int)SEM_MODIF_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    snprintf(path_sem_allow_transf,PRIV_SEM_PATH_SIZE, "/%0*d%0*d", (int)PATH_PID_SIZE, clpid, (int)PATH_INDEX_SIZE, (int)SEM_ALLOW_TRANSF_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+
+
+    printf("path_mq_to_server: %s\n", path_mq_to_server);
+    printf("path_mq_from_server: %s\n", path_mq_from_server);
+    printf("path_sem_modif: %s\n", path_sem_modif);
+    printf("path_sem_allow_transf: %s\n", path_sem_allow_transf);
 
     mqd_t mqfd_to_serv = mq_open(path_mq_to_server, O_RDWR);
+    if(mqfd_to_serv == -1) {
+        perror("mqfd_to_serv mq_open failure");
+        exit(0);
+    }
     mqd_t mqfd_from_serv = mq_open(path_mq_from_server, O_RDWR);
+    if(mqfd_from_serv == -1) {
+        perror("mqfd_from_serv mq_open failure");
+        exit(0);
+    }
     sem_t *sem_modif = sem_open(path_sem_modif , O_RDWR);
+    if(sem_modif == SEM_FAILED) {
+        perror("sem_modif sem_open failed\n");
+        exit(0);
+    }
     sem_t *sem_allow_transf = sem_open(path_sem_allow_transf , O_RDWR);
-
+    if(sem_allow_transf == SEM_FAILED) {
+        perror("sem_allow_transf sem_open failed\n");
+        exit(0);
+    }
 
     int filenumber;
     unsigned long filesize;
@@ -77,6 +101,7 @@ int clientHandler(void *arg) {
     filenumber = *((int *)msgbuff); 
 
     filesize = *((unsigned long *)(msgbuff + HEADER_FNO)); 
+    printf("new file request recved! filenumber: %d filesize: %lu", filenumber, filesize);
 
     char *temp_storage = malloc(filesize); 
 
@@ -100,7 +125,7 @@ int clientHandler(void *arg) {
 
 
         memcpy(temp_storage + cumsize, shm_info.addr, chunksize);
-
+        printf("got file! filenumber: %d chunksize: %lu", filenumber, chunksize);
         cumsize += chunksize;
 
         sem_post(sem_global);
@@ -110,7 +135,7 @@ int clientHandler(void *arg) {
     char *outbuff;
     compressFile(temp_storage, filesize, &outbuff);
 
-
+    printf("compression successful!\n");
 
     free(outbuff);
     free(temp_storage);
@@ -128,8 +153,6 @@ void connectClient(char* msgbuff) {
     child_stack += STACKSIZE; //stack top, stack grows down
     struct clone_arg *arg = (struct clone_arg *) malloc(sizeof(struct clone_arg));
     memcpy(arg->msg, msgbuff, MSGSIZE_GLOBAL);
-    printf("starting new thread for client pid: %s\n", msgbuff);
-
     int clone_pid = clone(clientHandler, (void *)child_stack, SIGCHLD, (void *)arg);
 }
 
@@ -148,7 +171,7 @@ void initTinyServer(mqd_t *mqfd, char **addr) {
     }
 
 
-    sem_global = sem_open(SEMPATH_GLOBAL , O_RDWR|O_CREAT, S_IRUSR | S_IWUSR, 0);
+    sem_global = sem_open(SEMPATH_GLOBAL , O_RDWR|O_CREAT, S_IRUSR | S_IWUSR, 1);
     if(sem_global == SEM_FAILED) {
         perror("sem global failed\n");
         exit(0);
