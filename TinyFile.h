@@ -22,7 +22,7 @@
 
 #define SEGSIZE 10
 #define MSGSIZE_GLOBAL 4
-#define MSGSIZE_PRIVATE 4
+#define MSGSIZE_PRIVATE 8
 #define MAXMSGNUM 10
 
 #define PRIV_MSG_PATH_SIZE 8
@@ -30,26 +30,17 @@
 
 #define MQ_TO_SERVER_INDEX 0
     #define MQ_FROM_SERVER_INDEX 1
-    #define SEM_MODIF_INDEX 0
-    #define SEM_ALLOW_TRANSF_INDEX 1
+    #define SEM_MODIF_INDEX 10
+    #define SEM_ALLOW_TRANSF_INDEX 11
 
-/**packet: 
-Header : | method(1byte) | PID (4byte) | FILENAME_int (4byte) | SIZE(4byte) ) | => 13byte
+//*****protocol****************************************
+#define HEADER_FNO 4
+#define HEADER_CHUNK 4
+#define HEADER_FSZ 4
 
-**/
-/** Methods:
-FILE (char value: 1) | PID (4byte) | FILENAME_int (4byte) | TOTALSIZE(4byte) | no content
-FILE2(char value: 2) | PID (4byte) | FILENAME_int (4byte) | size of fraction(4byte) | content
+#define MAX_STORAGE 2
+//*******************************************************
 
-**/
-
-#define MHD_FILE  '1'
-#define MHD_FILE2 '2'
-
-#define HEADER_SIZE 13
-
-
-// char *filepath = "peda-session-client.txt";
 
 // link with -lrt -pthread
 typedef struct mqd_t_client {
@@ -73,6 +64,21 @@ typedef struct shm_info {
     int len;
 } shm_info_t;
 
+
+// typedef struct file_info {
+//     int filenumber;
+//     int filesize;
+//     char *temp_storage;
+// } file_info_t
+
+// typedef struct file_info_all {
+    
+
+
+// } file_info_all_t
+
+
+// file_info_t file_info_array[MAX_STORAGE];
 
 
 size_t fwrite_buf( void const* ptr, size_t size, FILE* stream);

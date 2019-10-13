@@ -21,7 +21,12 @@ int initGlobalMessageQueue(mqd_t *mqfd_ptr) {
 int initPrivateMessageQueue(mqd_t *mqfd_ptr, int index) {
     int pid = getpid();
     char msgbuff[PRIV_MSG_PATH_SIZE];
+
+    // path size should be 4 same as MSGSIZE_GLOBAL
     sprintf(msgbuff, "/%04d%03d", pid, index); // ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    // index 0 : msg queue from cleint to the server, 
+    // index 1 : msg queue from the server to client
+
 
     struct mq_attr attr;
     attr.mq_maxmsg = MAXMSGNUM;
@@ -45,6 +50,9 @@ void initSemaphore(sem_t **sem_ptr, int index) {
     char msgbuff[PRIV_SEM_PATH_SIZE];
     sprintf(msgbuff, "/%04d%03d", pid, index);
     sem_t *sem = sem_open(msgbuff , O_RDWR | O_CREAT ,S_IRUSR | S_IWUSR);
+    // index 0 : sem_allow_transf, 
+    // index 1 : sem_modif
+
 
     if (sem == SEM_FAILED){
         perror("sem_open");
@@ -82,10 +90,16 @@ void initClient(shm_info_t *shm_info, client_sem_t *clsem, client_mqfd_t *mqfd) 
     // 1. init sharedmemory
     // 1. init semaphores 
     printf("1\n");
+    // pid
     initGlobalMessageQueue(&mqfd->mqfd_global);
     printf("1\n");
+    //meta data of the file (how many chunks)
+    // fist msg :| filenumber(4) | filesize(4)  |
+    // other msg:| filenumber(4) | chunksize(4) |
     initPrivateMessageQueue(&mqfd->mqfd_to_server, MQ_TO_SERVER_INDEX);
     printf("1\n");
+    //TODO: remove 
+    //2 semaphores per client
     initPrivateMessageQueue(&mqfd->mqfd_from_server, MQ_FROM_SERVER_INDEX);
     printf("1\n");
 

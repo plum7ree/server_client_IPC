@@ -12,6 +12,8 @@ struct clone_arg {
     char msg[MSGSIZE_GLOBAL];
 };
 
+
+
 sem_t *sem_global;
 shm_info_t shm_info;
 
@@ -39,8 +41,98 @@ void run_file_transfer (void *arg) {
     return;
 }
 
+// int searchFile(int filenumber) {
+//     for(int i = 0; i < MAX_STORAGE; i++) {
+//         if(file_info_array[i].filenumber == filenumber) {
+//             return 1;
+//         }
+//     }
+
+//     return 0;
+// }
+
+// int createNewFileInfo(int filenumber, int filesize) {
+//     // recieve first message : fist msg :| filenumber(4) | filesize(4)  |
+
+
+//     // create storage buffer in memory, don't forget to free later!!!!
+//     file_info_t *file_info = malloc(sizeof(file_info_t));
+//     file_info->filenumber = filenumber;
+//     file_info->filesize = filesize;
+//     file_info->temp_storage = malloc(filesize); 
+
+//     file_info_array
+
+//     return 1;
+
+// }
+
 void clientHandler(void *arg) {
-    char *msg = ((struct clone_arg *)arg)->msg;
+    char *pid = ((struct clone_arg *)arg)->msg;
+
+    char path_mq_to_server[MSGSIZE_GLOBAL]; // path prefix size should be 4 same as MSGSIZE_GLOBAL
+    char path_mq_from_server[MSGSIZE_GLOBAL];
+    char path_sem_modif[MSGSIZE_GLOBAL];
+    char path_sem_allow_transf[MSGSIZE_GLOBAL];
+
+    sprintf(path_mq_to_server, "/%s%03d", pid, MQ_TO_SERVER_INDEX);
+    sprintf(path_mq_from_server,"/%s%03d", pid, MQ_FROM_SERVER_INDEX);
+    sprintf(path_sem_modif,"/%s%03d", pid, SEM_MODIF_INDEX);
+    sprintf(path_sem_allow_transf,"/%s%03d", pid, SEM_ALLOW_TRANSF_INDEX);
+
+    mqd_t mqfd_to_serv = mq_open(path_mq_to_server, O_RDWR);
+    mqd_t mqfd_from_serv = mq_open(path_mq_from_server, O_RDWR);
+    sem_t *sem_modif = sem_open(path_sem_modif , O_RDWR);
+    sem_t *sem_allow_transf = sem_open(path_sem_allow_transf , O_RDWR);
+
+
+    int filenumber;
+    int filesize;
+    int chunksize = 0;
+    int cumsize = 0;
+
+
+    // never ends until client is sending done.
+    while(1) {
+        // real chunk info : | filenumber(4) | chunksize(4) |
+        int status = mq_receive(mqfd_to_serv, msgbuff, MSGSIZE_PRIVATE, 0);
+        if (status == -1) {
+            perror("receiving first msg failure\n");
+        }
+
+        char header_fno[HEADER_FNO];
+        memcpy(header_fno, msgbuff, HEADER_FNO);
+        filenumber = atoi(header_fno); 
+
+        // // if this is new file, create storage in memory for this file.
+        // if(!searchFile(filenumber)) {
+
+        //     char header_chunk[HEADER_FSZ];
+        //     memcpy(header_chunk, msgbuff + HEADER_FNO, HEADER_FSZ);
+        //     filesize = atoi(header_chunk);
+
+        //     if (!createNewFileInfo(filenumber, filesize)) { // there are limited number of storage for file requests.
+        //         perror("maximum number of file for storage exceeds!\n"); // client should handle maximum number of file for async
+        //     }
+        //     continue;
+        // }
+
+        char header_chunk[HEADER_CHUNK];
+        memcpy(header_chunk, msgbuff + HEADER_FNO, HEADER_FSZ);
+        chunksize = msgbuff
+
+
+
+    }
+    
+
+
+
+
+    free(file_info->temp_storage);
+    free(file_info);
+
+
 //     sem_allow_transf = // sem only shared between one client and server
 
     
