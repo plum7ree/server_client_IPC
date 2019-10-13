@@ -78,5 +78,11 @@ typedef struct shm_info {
 
 size_t fwrite_buf( void const* ptr, size_t size, FILE* stream);
 size_t fread_buf( void* ptr, size_t size, FILE* stream);
+void createMessage(char *msgbuff, int fileno, unsigned long size);
+
+int getFilenumber(char *msgbuff);
+
+unsigned long getSizeValue(char *msgbuff);
+
 
 
