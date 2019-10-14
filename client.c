@@ -9,7 +9,7 @@ int initGlobalMessageQueue(mqd_t *mqfd_ptr) {
     // client sends private msq path, private semaphores path
     mqd_t fd = mq_open(MQPATH_GLOBAL, O_RDWR);
     printf("1\n");
-    if(fd == -1) {
+    if(fd == -1) {  
         perror("global mq_open failure");
         exit(0);
     }
@@ -165,6 +165,7 @@ void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_
         if (status == -1) {
             perror("mq_send failure\n");
         }
+        printf("msg sent to server\n");
         
 
         sem_wait(clsem->sem_allow_transf);
@@ -234,6 +235,9 @@ int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, cha
     return filenumber;
 }
 
+
+
+
 int
 main(int argc, char *argv[])
 {   
@@ -248,17 +252,23 @@ main(int argc, char *argv[])
 
     char fname_array[100][30];
     int filenumber = 0;
-    char *filepath = "README.md";
+    char filepath[FILENAMESIZE];
     
-    snprintf(fname_array[filenumber], 30,"%s.compressed",filepath);
-
-    sendFile(filepath, &shm_info, &mqfd, &clsem, filenumber);
-
     
-    recvFile(&shm_info, &mqfd, &clsem, fname_array[filenumber]);
+    while(filenumber < 5) {
+        snprintf(filepath, FILENAMESIZE, "README%d.md", filenumber);
+        printf("%s\n", filepath);
+        snprintf(fname_array[filenumber], 30,"%s.compressed",filepath);
 
+        sendFile(filepath, &shm_info, &mqfd, &clsem, filenumber);
 
-    filenumber++;
+        
+        recvFile(&shm_info, &mqfd, &clsem, fname_array[filenumber]);
+
+        filenumber++;
+    }
+    
+
 }
 
 
