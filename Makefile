@@ -11,4 +11,11 @@ server: $(OBJ) server.o
 
 all: client server
 
+debug_client: $(OBJ) client.o
+	$(CC) -g $(SRC) client.c -o client $(LIBS)
+
+debug_server:$(OBJ) server.o
+	$(CC) -g $(SRC) server.c -o server $(LIBS)	
+
+debug: debug_client debug_server
 

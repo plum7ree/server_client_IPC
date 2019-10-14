@@ -23,6 +23,7 @@ int initPrivateMessageQueue(mqd_t *mqfd_ptr, int index) {
     char msgbuff[PRIV_MQ_PATH_SIZE];
 
     snprintf(msgbuff,PRIV_MQ_PATH_SIZE ,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, index);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    // path will look like /00007442001 if pid 7442, index 1
     // index 0 : msg queue from cleint to the server, 
     // index 1 : msg queue from the server to client
 
@@ -47,6 +48,7 @@ void initSemaphore(sem_t **sem_ptr, int index) {
     int pid = getpid();
     char msgbuff[PRIV_SEM_PATH_SIZE];
     snprintf(msgbuff, PRIV_SEM_PATH_SIZE,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, index);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    // path will look like /00007442001 if pid 7442, index 10
     sem_t *sem = sem_open(msgbuff , O_RDWR | O_CREAT ,S_IRUSR | S_IWUSR, 0);
     // index 0 : sem_allow_transf, 
     // index 1 : sem_modif
@@ -83,15 +85,10 @@ void initSharedMem(int *shm_fd, char **shm_addr, int len) {
 
 
 void initClient(shm_info_t *shm_info, client_sem_t *clsem, client_mqfd_t *mqfd) {
-    // 1. open global msg queue
-    // 1. init two private message queue (send to server, receive from server)
-    // 1. init sharedmemory
-    // 1. init semaphores 
-    // pid
     initGlobalMessageQueue(&mqfd->mqfd_global);
     //meta data of the file (how many chunks)
-    // fist msg :| filenumber(4) | filesize(4)  |
-    // other msg:| filenumber(4) | chunksize(4) |
+    // fist msg :| filenumber(4) | filesize(8)  |
+    // other msg:| filenumber(4) | chunksize(8) |
     initPrivateMessageQueue(&mqfd->mqfd_to_server, MQ_TO_SERVER_INDEX);
     //TODO: remove 
     //2 semaphores per client
@@ -101,15 +98,14 @@ void initClient(shm_info_t *shm_info, client_sem_t *clsem, client_mqfd_t *mqfd) 
     initSharedMem(&shm_info->fd, &shm_info->addr, shm_info->len);
     initSemaphore(&clsem->sem_modif, SEM_MODIF_INDEX);
     initSemaphore(&clsem->sem_allow_transf, SEM_ALLOW_TRANSF_INDEX);
-    // initSemaphore(clsem->sem_allow_to_server_msg , 2);
-    // initSemaphore(clsem->sem_to_server_sent , 3);
-    // initSemaphore(clsem->sem_allow_from_server_msg , 4);
-    // initSemaphore(clsem->sem_from_server_sent , 5);
 
 }
 
+
+
+
+
 void connectToServer(client_mqfd_t *mqfd, client_sem_t *clsem) {
-    // PROTOCOL : send PID to server. server will mq_open("/%04d%03d"), sem_open("/%04d%03d")
     int pid = getpid();
     char msgbuff[MSGSIZE_GLOBAL];
     *(int*)msgbuff = pid; // we are sending integer, not string!
@@ -127,14 +123,6 @@ void connectToServer(client_mqfd_t *mqfd, client_sem_t *clsem) {
     mq_receive(mqfd->mqfd_from_server,msgbuff_from_server ,MSGSIZE_PRIVATE,0);
 
 }
-
-
-
-
-/* Size of shared memory object */
-// FILE * pFile;
-// sem_t *sem, *sem_modif, *sem_allow_transf;
-// client_mqfd_t client_mqfd;
 
 void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumber) {
 
@@ -187,62 +175,64 @@ void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_
 
         cumsize += chunksize; 
     }
-    
+    fclose(pFile);
 
 }
 
-// int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, char **fname_array) {
+int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, char *fname) {
 
-//     int filenumber;
-//     unsigned long filesize;
-//     FILE pFile;
+    int filenumber;
+    unsigned long filesize = 0;
+    unsigned long cumsize = 0;
+    unsigned long chunksize = 0;
+    FILE *pFile;
+    char msgbuff[MSGSIZE_PRIVATE];
 
-//     // recieve first message from client : fist msg :| filenumber(4) | filesize(4)  |
-//     int status = mq_receive(mqfd_from_serv, msgbuff, MSGSIZE_PRIVATE, 0);
-//     if (status == -1) {
-//         perror("receiving first msg failure\n");
-//     }
+    // recieve first message from client : fist msg :| filenumber(4) | filesize(8)  |
+    printf("wait to receive compressed file!\n");
+    int status = mq_receive(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
+    if (status == -1) {
+        perror("receiving first msg failure\n");
+    }
 
-//     filenumber = getFilenumber(msgbuff);
-//     filesize = getSizeValue(msgbuff); 
-//     printf("new file request recved! filenumber: %d filesize: %lu\n", filenumber, filesize);
-
-
-//     char *fname = fname_array[filenumber];
-//     pFile = fopen(fname, 'wb');
-//     // char *temp_storage = malloc(filesize);  
-
-
-//     // start read file chunk and store
-//     while(cumsize < filesize) {
-//         // real chunk info : | filenumber(4) : int | chunksize(8)  :unsigned long |
-//         int status = mq_receive(mqfd_to_serv, msgbuff, MSGSIZE_PRIVATE, 0);
-//         if (status == -1) {
-//             perror("receiving file chunk msg failure\n");
-//         }
-
-//         filenumber = getFilenumber(msgbuff); 
-//         chunksize = getSizeValue(msgbuff); 
-//         printf("got msg chunk! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
-
-//         sem_wait(sem_allow_transf); 
-//         sem_post(sem_modif);
+    filenumber = getFilenumber(msgbuff);
+    filesize = getSizeValue(msgbuff); 
+    printf("new file request recved! filenumber: %d filesize: %lu\n", filenumber, filesize);
 
 
-//         // memcpy(temp_storage + cumsize, shm_info.addr, chunksize);
-//         fwrite_buf(shm_info.addr, chunksize, pFile);
-
-//         printf("got file! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
-//         cumsize += chunksize;
-
-//         sem_post(sem_global);
-
-//     }
-//     fclose(pFile);
+    pFile = fopen(fname, "wb+");
+    // char *temp_storage = malloc(filesize);  
 
 
-//     return filenumber;
-// }
+    // start read file chunk and store
+    while(cumsize < filesize) {
+        // real chunk info : | filenumber(4) : int | chunksize(8)  :unsigned long |
+        int status = mq_receive(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
+        if (status == -1) {
+            perror("receiving file chunk msg failure\n");
+        }
+
+        filenumber = getFilenumber(msgbuff); 
+        chunksize = getSizeValue(msgbuff); 
+        printf("got msg chunk! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
+
+        sem_post(clsem->sem_allow_transf);
+        sem_wait(clsem->sem_modif); 
+
+
+        // memcpy(temp_storage + cumsize, shm_info.addr, chunksize);
+        fwrite_buf(shm_info->addr, chunksize, pFile);
+
+        printf("got file! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
+        cumsize += chunksize;
+
+
+    }
+    fclose(pFile);
+
+
+    return filenumber;
+}
 
 int
 main(int argc, char *argv[])
@@ -255,12 +245,17 @@ main(int argc, char *argv[])
 
     connectToServer(&mqfd, &clsem);
 
+
+    char fname_array[100][30];
     int filenumber = 0;
     char *filepath = "README.md";
+    
+    snprintf(fname_array[filenumber], 30,"%s.compressed",filepath);
 
     sendFile(filepath, &shm_info, &mqfd, &clsem, filenumber);
 
-    // recvFile()
+    
+    recvFile(&shm_info, &mqfd, &clsem, fname_array[filenumber]);
 
 
     filenumber++;
