@@ -26,6 +26,9 @@
 #define MAXMSGNUM 10
 
 
+// file names
+#define FILENAMESIZE 20
+
 
 //******** SEM, MQ PATH****************************************
 
@@ -48,6 +51,7 @@
 #define HEADER_FSZ 8
 
 #define MAX_STORAGE 2
+#define DISCONNECT (-1)
 //*******************************************************
 
 

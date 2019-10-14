@@ -25,7 +25,7 @@ void initPrivateConnection(int clpid, char *path_mq_to_server, char* path_mq_fro
 void listenToNewConnection(mqd_t mqfd, char *msgbuff) ;
 void connectClient(char* msgbuff) ;
 int compressFile(char *input, unsigned long filesize, char **output, unsigned long *outsize) ;
-void recvFromClient(char *msgbuff, char **temp_storage, int *fileno, unsigned long *filesz, \
+int recvFromClient(char *msgbuff, char **temp_storage, int *fileno, unsigned long *filesz, \
     client_mqfd_t *mqfd, client_sem_t *clsem); 
 void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storage, \
     client_mqfd_t *mqfd, client_sem_t *clsem );
@@ -119,6 +119,12 @@ void initPrivateConnection(int clpid, char *path_mq_to_server, char* path_mq_fro
     clsem->sem_allow_transf = sem_allow_transf;
     clsem->sem_modif = sem_modif;
 
+    // tell client server is ready to recieve with just empty msg
+    char msgbuff[MSGSIZE_PRIVATE];
+    int status = mq_send(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
+    if (status == -1) {
+        perror("sending to client with mqfd_from_serv failure\n");
+    }
 
 }
 
@@ -163,23 +169,19 @@ int compressFile(char *input, unsigned long filesize, char **outbuff, unsigned l
 }
 
 
-void recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned long *filesz, \
+int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned long *filesz, \
     client_mqfd_t *mqfd, client_sem_t *clsem) {
 
-
-    // tell client server is ready to recieve with just empty msg
-    int status = mq_send(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
-    if (status == -1) {
-        perror("sending to client with mqfd_from_serv failure\n");
-    }
-
     // recieve first message from client : fist msg :| filenumber(4) | filesize(4)  |
-    status = mq_receive(mqfd->mqfd_to_server, msgbuff, MSGSIZE_PRIVATE, 0);
+    int status = mq_receive(mqfd->mqfd_to_server, msgbuff, MSGSIZE_PRIVATE, 0);
     if (status == -1) {
         perror("receiving first msg failure\n");
     }
 
     int filenumber = getFilenumber(msgbuff);
+    if (filenumber == DISCONNECT) {
+        return DISCONNECT; //disconnect client
+    }
     unsigned long filesize = getSizeValue(msgbuff); 
     unsigned long cumsize = 0;
     unsigned long chunksize = 0;
@@ -215,6 +217,8 @@ void recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned 
     *fileno = filenumber;
     *filesz = filesize;
     *temp_store_ptr = temp_storage;
+
+    return 1;
 }
 
 void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storage, \
@@ -228,7 +232,7 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
 
         unsigned long chunksize = SEGSIZE;
         if (cumsize + chunksize > filesize) {
-            chunksize = filenumber - cumsize;
+            chunksize = filesize - cumsize;
         }
         createMessage(msgbuff, filenumber, chunksize);
         // filenumber = *((int *)msgbuff); 
@@ -253,6 +257,7 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
 
         cumsize += chunksize; 
     }
+    printf("end of sentToClient\n");
 }
 
 
@@ -274,36 +279,44 @@ int clientHandler(void *arg) {
     initPrivateConnection(clpid, path_mq_to_server, path_mq_from_server, path_sem_modif, \
         path_sem_allow_transf, &mqfd , &clsem);
 
-
     int filenumber =-1;
     unsigned long filesize = 0;
-
-    //************************************recv from client *************************************//
-
     char msgbuff[MSGSIZE_PRIVATE];
     char *temp_storage; 
-    recvFromClient(msgbuff, &temp_storage, &filenumber, &filesize, &mqfd, &clsem);
-    printf("recieve a file done\n");
-
-    //***********************************compress*************************************************
-    char *outbuff = xmalloc(snappy_max_compressed_length((size_t)filesize));
-    unsigned long compressed_size = -1 ;
-    int res = compressFile(temp_storage, filesize, &outbuff, &compressed_size);
-
-    //********************************SEND BACK TO CLIENT***************************************
-    
+    char *outbuff;
     char from_serv_msgbuff[MSGSIZE_PRIVATE];
-    createMessage(from_serv_msgbuff, filenumber, compressed_size);
 
-    int status = mq_send(mqfd.mqfd_from_server, from_serv_msgbuff, MSGSIZE_PRIVATE, 0);
-    if (status == -1) {
-        perror("sending to client with mqfd_from_serv failure\n");
+    //************************************recv from client *************************************//
+    while(1) {
+        
+        int conn = recvFromClient(msgbuff, &temp_storage, &filenumber, &filesize, &mqfd, &clsem);
+        if(conn == DISCONNECT ) {
+            printf("disconnecting with client\n");
+            break;
+        }
+        printf("recieve a file done\n");
+
+        //***********************************compress*************************************************
+        outbuff = xmalloc(snappy_max_compressed_length((size_t)filesize));
+        unsigned long compressed_size = -1 ;
+        int res = compressFile(temp_storage, filesize, &outbuff, &compressed_size);
+
+        //********************************SEND BACK TO CLIENT***************************************
+        
+        
+        createMessage(from_serv_msgbuff, filenumber, compressed_size);
+
+        int status = mq_send(mqfd.mqfd_from_server, from_serv_msgbuff, MSGSIZE_PRIVATE, 0);
+        if (status == -1) {
+            perror("sending to client with mqfd_from_serv failure\n");
+        }
+        printf("mq sent to client\n");
+
+
+        sendToClient(filenumber, compressed_size, from_serv_msgbuff, temp_storage, &mqfd, &clsem);
+
     }
-    printf("mq sent to client\n");
-
-
-    sendToClient(filenumber, compressed_size, from_serv_msgbuff, temp_storage, &mqfd, &clsem);
-
+    
     //******************************************************************************************* 
     free(outbuff);
     free(temp_storage);
@@ -331,6 +344,8 @@ main(int argc, char *argv[])
         listenToNewConnection(mqfd.mqfd_global, msgbuff);
         //2. create thread for that client (clone)
         connectClient(msgbuff);
+
+
     }
 
 
