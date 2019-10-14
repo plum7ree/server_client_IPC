@@ -228,7 +228,7 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
 
         unsigned long chunksize = SEGSIZE;
         if (cumsize + chunksize > filesize) {
-            chunksize = filenumber - cumsize;
+            chunksize = filesize - cumsize;
         }
         createMessage(msgbuff, filenumber, chunksize);
         // filenumber = *((int *)msgbuff); 
