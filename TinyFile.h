@@ -22,21 +22,30 @@
 
 #define SEGSIZE 10
 #define MSGSIZE_GLOBAL 4
-#define MSGSIZE_PRIVATE 8
+#define MSGSIZE_PRIVATE 12
 #define MAXMSGNUM 10
 
-#define PRIV_MSG_PATH_SIZE 8
-#define PRIV_SEM_PATH_SIZE 8
+
+
+//******** SEM, MQ PATH****************************************
+
+#define PATH_PID_SIZE 8
+#define PATH_INDEX_SIZE 3
+
+#define PRIV_MQ_PATH_SIZE (PATH_PID_SIZE + PATH_INDEX_SIZE + 1 + 1)  // ex) if pid: 3131, index:1, path: /00003131001
+#define PRIV_SEM_PATH_SIZE (PATH_PID_SIZE + PATH_INDEX_SIZE + 1 + 1) //
 
 #define MQ_TO_SERVER_INDEX 0
-    #define MQ_FROM_SERVER_INDEX 1
-    #define SEM_MODIF_INDEX 10
-    #define SEM_ALLOW_TRANSF_INDEX 11
+#define MQ_FROM_SERVER_INDEX 1
+#define SEM_MODIF_INDEX 10
+#define SEM_ALLOW_TRANSF_INDEX 11
+//*************************************************************
 
-//*****protocol****************************************
+
+//*****protocol***********************************************
 #define HEADER_FNO 4
-#define HEADER_CHUNK 4
-#define HEADER_FSZ 4
+#define HEADER_CHUNK 8
+#define HEADER_FSZ 8
 
 #define MAX_STORAGE 2
 //*******************************************************
@@ -66,7 +75,14 @@ typedef struct shm_info {
 
 
 
+
 size_t fwrite_buf( void const* ptr, size_t size, FILE* stream);
 size_t fread_buf( void* ptr, size_t size, FILE* stream);
+void createMessage(char *msgbuff, int fileno, unsigned long size);
+
+int getFilenumber(char *msgbuff);
+
+unsigned long getSizeValue(char *msgbuff);
+
 
 
