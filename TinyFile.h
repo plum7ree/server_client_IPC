@@ -27,7 +27,7 @@
 
 
 // file names
-#define FILENAMESIZE 20
+#define FILENAMESIZE 50
 
 
 //******** SEM, MQ PATH****************************************

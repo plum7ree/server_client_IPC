@@ -1,6 +1,9 @@
-
+#include <yaml.h>
+#include <assert.h>
 
 #include "TinyFile.h"
+#include <stdio.h>
+#include <ctype.h>
 
 
 
@@ -130,7 +133,7 @@ void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_
     char chunkbuff[SEGSIZE];
     FILE *pFile;
     unsigned long cumsize = 0;
-
+    printf("OPEN %s \n", path);
     pFile = fopen(path, "rb");
     if (pFile==NULL) {
         perror("file open error!\n");
@@ -237,7 +240,60 @@ int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, cha
 
 
 
+char *trim(char *s) {
+    char *ptr;
+    if (!s)
+        return NULL;   // handle NULL string
+    if (!*s)
+        return s;      // handle empty string
+    for (ptr = s + strlen(s) - 1; (ptr >= s) && isspace(*ptr); --ptr);
+    ptr[1] = '\0';
+    return s;
+}
+int parseYAML(char* path, char files[][FILENAMESIZE]) {
 
+    FILE *file;
+    yaml_parser_t parser;
+    yaml_event_t event;
+    int done = 0;
+    int count = 0;
+    int error = 0;
+    char* value;
+    int expecting_filename = 0;
+
+    printf("Parsing '%s':\n", path);
+    fflush(stdout);
+
+    file = fopen(path, "rb");
+    assert(file);
+
+    assert(yaml_parser_initialize(&parser));
+
+    yaml_parser_set_input_file(&parser, file);
+    int i = 0;
+    while (!done) {
+        if (!yaml_parser_parse(&parser, &event)) {
+            error = 1;
+            break;
+        }
+
+        if (event.type == YAML_SCALAR_EVENT) {
+            value = event.data.scalar.value;
+            if (expecting_filename) {
+                sprintf(files[i++], "%s", trim(value));
+                expecting_filename = 0;
+            }
+            if (strcmp(value, "FILE_TYPE") == 0) {
+                expecting_filename = 1;
+            }
+        }
+        done = (event.type == YAML_STREAM_END_EVENT);
+
+    }
+    yaml_event_delete(&event);
+    assert(!fclose(file));
+    return i;
+}
 int
 main(int argc, char *argv[])
 {   
@@ -245,27 +301,28 @@ main(int argc, char *argv[])
 
     client_sem_t clsem;
     shm_info_t shm_info;
-    initClient(&shm_info, &clsem, &mqfd);
 
+
+    char fname_array[100][FILENAMESIZE];
+    int fileCount;
+    int filenumber = 0;
+    char filepath[FILENAMESIZE];
+    for (int i=0; i <argc; i++) {
+        if (strcmp(argv[i], "--conf") == 0) {
+            fileCount = parseYAML(argv[++i], fname_array);
+        }
+    }
+
+    initClient(&shm_info, &clsem, &mqfd);
     connectToServer(&mqfd, &clsem);
 
 
-    char fname_array[100][30];
-    int filenumber = 0;
-    char filepath[FILENAMESIZE];
-    
-    
-    while(filenumber < 5) {
-        snprintf(filepath, FILENAMESIZE, "README%d.md", filenumber);
-        printf("%s\n", filepath);
-        snprintf(fname_array[filenumber], 30,"%s.compressed",filepath);
-
+    for(filenumber=0; filenumber < fileCount; filenumber++) {
+        snprintf(filepath, FILENAMESIZE, "%s", fname_array[filenumber]);
+        printf("%s\n", fname_array[filenumber]);
+//        snprintf(filepath, FILENAMESIZE,"%s.compressed",filepath);
         sendFile(filepath, &shm_info, &mqfd, &clsem, filenumber);
-
-        
         recvFile(&shm_info, &mqfd, &clsem, fname_array[filenumber]);
-
-        filenumber++;
     }
     
 
