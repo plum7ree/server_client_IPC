@@ -7,7 +7,7 @@
 
 #include "TinyFile.h"
 
-#define STACKSIZE 1024
+#define STACKSIZE 65536
 #define ONE_MB 1024*1024
 
 struct clone_arg {
