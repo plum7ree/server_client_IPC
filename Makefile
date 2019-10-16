@@ -1,7 +1,7 @@
 CC = gcc
 SRC= TinyFile.c snappy-c/snappy.c snappy-c/map.c snappy-c/util.c
 OBJ= $(SRC:.c=.o)
-LIBS = -lrt -pthread -I./libyaml/include/
+LIBS = -lrt -pthread -I./
 
 client: $(OBJ) client.o
 	$(CC) $(SRC) libyaml.so client.c -o client $(LIBS)
