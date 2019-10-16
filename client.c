@@ -317,11 +317,19 @@ main(int argc, char *argv[])
     connectToServer(&mqfd, &clsem);
 
 
+//    1. convert each file into a struct to keep state
+//    2. mq_receive will use nonblocking (maybe try the timed version first)
+//    3. server side will need to convert file compression into another thread
+//    4. server side will need to convert id to pid + fileid
+//    5. server side loop will need to know whether to wait for a msg queue or send pending ones (non block)
+
+
+
     for(filenumber=0; filenumber < fileCount; filenumber++) {
         snprintf(filepath, FILENAMESIZE, "%s", fname_array[filenumber]);
         printf("%s\n", fname_array[filenumber]);
-//        snprintf(filepath, FILENAMESIZE,"%s.compressed",filepath);
         sendFile(filepath, &shm_info, &mqfd, &clsem, filenumber);
+        snprintf(fname_array[filenumber], FILENAMESIZE,"%s.compressed",filepath);
         recvFile(&shm_info, &mqfd, &clsem, fname_array[filenumber]);
     }
     

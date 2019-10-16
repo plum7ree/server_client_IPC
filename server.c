@@ -14,6 +14,15 @@ struct clone_arg {
     char msg[MSGSIZE_GLOBAL];
 };
 
+struct clone_respond_arg {
+    long filesize;
+    char* temp_storage;
+    char* from_serv_msgbuff;
+    int filenumber;
+    client_sem_t clsem;
+    client_mqfd_t mqfd;
+};
+
 
 
 sem_t *sem_global;
@@ -187,7 +196,7 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
     unsigned long chunksize = 0;
     char *temp_storage = malloc(filesize);
 
-    printf("new file request recved! filenumber: %d filesize: %lu\n", filenumber, filesize); 
+    printf("new file request received! filenumber: %d filesize: %lu\n", filenumber, filesize);
 
 
     // start read file chunk and store
@@ -261,6 +270,29 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
 }
 
 
+int clientRespondHandler(void *arguments) {
+    struct clone_respond_arg *arg = (struct clone_respond_arg*) arguments;
+    char *outbuff;
+    outbuff = xmalloc(snappy_max_compressed_length((size_t)arg->filesize));
+    unsigned long compressed_size = -1 ;
+    int res = compressFile(arg->temp_storage, arg->filesize, &outbuff, &compressed_size);
+
+    //********************************SEND BACK TO CLIENT***************************************
+
+
+    createMessage(arg->from_serv_msgbuff, arg->filenumber, compressed_size);
+
+    int status = mq_send((arg->mqfd).mqfd_from_server, arg->from_serv_msgbuff, MSGSIZE_PRIVATE, 0);
+    if (status == -1) {
+        perror("sending to client with mqfd_from_serv failure\n");
+    }
+    printf("mq sent to client\n");
+
+
+    sendToClient(arg->filenumber, compressed_size, arg->from_serv_msgbuff, arg->temp_storage, &(arg->mqfd), &(arg->clsem));
+    printf("FINISHED\n");
+    free(outbuff);
+}
 
 int clientHandler(void *arg) {
     int clpid = *((int *)(((struct clone_arg *)arg)->msg));
@@ -271,6 +303,7 @@ int clientHandler(void *arg) {
     char path_mq_from_server[PRIV_MQ_PATH_SIZE];
     char path_sem_modif[PRIV_SEM_PATH_SIZE];
     char path_sem_allow_transf[PRIV_SEM_PATH_SIZE];
+//    TODO: create a semaphore to lock queue
 
 
     client_mqfd_t mqfd;
@@ -290,12 +323,26 @@ int clientHandler(void *arg) {
     while(1) {
         
         int conn = recvFromClient(msgbuff, &temp_storage, &filenumber, &filesize, &mqfd, &clsem);
+//        TODO: spin new thread to handle compression and send back
         if(conn == DISCONNECT ) {
             printf("disconnecting with client\n");
             break;
         }
-        printf("recieve a file done\n");
+        printf("recieve file %d done\n", filenumber);
 
+        struct clone_respond_arg *respondArg;
+//        TODO: free this
+        respondArg = malloc(sizeof(struct clone_respond_arg));
+        respondArg->clsem = clsem;
+        respondArg->filenumber = filenumber;
+        respondArg->filesize = filesize;
+        respondArg->from_serv_msgbuff = from_serv_msgbuff;
+        respondArg->mqfd = mqfd;
+        respondArg->temp_storage = temp_storage;
+
+        pthread_t cThread;
+        pthread_create(&cThread, NULL, clientRespondHandler, respondArg);
+        continue;
         //***********************************compress*************************************************
         outbuff = xmalloc(snappy_max_compressed_length((size_t)filesize));
         unsigned long compressed_size = -1 ;
