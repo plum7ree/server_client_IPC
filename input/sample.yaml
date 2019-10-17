@@ -1,0 +1,9 @@
+EXPERIMENT_TYPE: SIMPLE
+
+REQUESTS:
+  - FILE_TYPE : ../input/Tiny.txt
+
+  - FILE_TYPE : ../input/Small.jpg
+
+  - FILE_TYPE : ../input/Medium.pdf
+
