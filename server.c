@@ -271,6 +271,8 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
             }
         }
 
+        sem_post(sem_global);
+
     }
 
     *fileno = filenumber;
