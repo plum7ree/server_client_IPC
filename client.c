@@ -4,9 +4,9 @@
 #include "TinyFile.h"
 #include <stdio.h>
 #include <ctype.h>
+#include <sys/time.h>
 
-shm_info_array_t shm_info_array;
-    
+shm_info_array_t shm_info_array; 
 
 
 int initGlobalMessageQueue(mqd_t *mqfd_ptr) {
@@ -91,7 +91,7 @@ void initSharedMem(unsigned long segsize, int index) {
 }
 
 
-void initClient(shm_info_t *shm_info, client_sem_t *clsem, client_mqfd_t *mqfd) {
+void initClient(client_sem_t *clsem, client_mqfd_t *mqfd) {
     initGlobalMessageQueue(&mqfd->mqfd_global);
     //meta data of the file (how many chunks)
     // fist msg :| filenumber(4) | filesize(8)  |
@@ -343,13 +343,73 @@ int parseYAML(char* path, char files[][FILENAMESIZE]) {
     assert(!fclose(file));
     return i;
 }
+
+void writeCST(cst_t *cst, int fileCount, unsigned long segsize) {
+
+    unsigned long sum = 0;
+    unsigned long cst_avg = 0;
+    for(int i=0; i<fileCount; i++) {
+        sum += cst[i].interval;
+    }
+
+    cst_avg = sum / (unsigned long) fileCount;
+
+    FILE *pfile = fopen(CST_FILE, "a+");
+    char buff[40];
+    fprintf(pfile, "%lu,%lu\n", segsize, cst_avg);
+    fclose(pfile);
+
+
+}
+
+void freeEverything(client_mqfd_t *mqfd, client_sem_t *clsem) {
+
+    /******************** 1. free mq **********************/
+    mqd_t mqfd_global;
+    mqd_t mqfd_to_server;
+    mqd_t mqfd_from_server;
+    mq_close(mqfd->mqfd_global);
+    mq_close(mqfd->mqfd_to_server);
+    mq_close(mqfd->mqfd_from_server);
+
+    // DO NOT mq_unlink(mqfd_global)
+    int pid = getpid();
+    char msgbuff[PRIV_MQ_PATH_SIZE];
+
+    snprintf(msgbuff,PRIV_MQ_PATH_SIZE ,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, MQ_TO_SERVER_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    mq_unlink(msgbuff);
+    snprintf(msgbuff,PRIV_MQ_PATH_SIZE ,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, MQ_FROM_SERVER_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    mq_unlink(msgbuff);
+    
+    /******************** 2. free sem **********************/
+    sem_close(clsem->sem_modif);
+    sem_close(clsem->sem_allow_transf);
+    snprintf(msgbuff,PRIV_SEM_PATH_SIZE ,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, SEM_MODIF_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    sem_unlink(msgbuff);
+    snprintf(msgbuff,PRIV_SEM_PATH_SIZE ,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, SEM_ALLOW_TRANSF_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    sem_unlink(msgbuff);
+    
+
+    /******************** 3. free shm **********************/
+    char shmpath[SHM_PATH_SIZE];
+
+    for (int index=0; index<shm_info_array.numseg; index++) {
+        // DO NOT SHM_UNLINK 
+        close(shm_info_array.array[index].fd);
+        munmap(shm_info_array.array[index].addr, shm_info_array.segsize);
+    }
+    free(shm_info_array.array);
+    // mq_unlink(MQPATH);
+
+}
+
+
 int
 main(int argc, char *argv[])
 {   
     client_mqfd_t mqfd;
 
     client_sem_t clsem;
-    shm_info_t shm_info;
 
 
     char fname_array[100][FILENAMESIZE];
@@ -362,9 +422,11 @@ main(int argc, char *argv[])
         }
     }
 
-    initClient(&shm_info, &clsem, &mqfd);
+    initClient(&clsem, &mqfd);
     connectToServer(&mqfd, &clsem);
 
+    // ********************* cst setting*****************************//
+    cst_t cst[fileCount];
 
 //    1. convert each file into a struct to keep state
 //    2. mq_receive will use nonblocking (maybe try the timed version first)
@@ -376,12 +438,32 @@ main(int argc, char *argv[])
     for(filenumber=0; filenumber < fileCount; filenumber++) {
         snprintf(filepath, FILENAMESIZE, "%s", fname_array[filenumber]);
         printf("%s\n", fname_array[filenumber]);
+
+
+
+        gettimeofday(&cst[filenumber].tv1, NULL);
+
+
+
         sendFile(filepath, &mqfd, &clsem, filenumber);
         snprintf(fname_array[filenumber], FILENAMESIZE,"%s.compressed",filepath);
         recvFile(&mqfd, &clsem, fname_array[filenumber]);
+
+
+
+
+        gettimeofday(&cst[filenumber].tv2, NULL);
+        cst[filenumber].interval = (cst[filenumber].tv2.tv_sec - cst[filenumber].tv1.tv_sec)*1000000.0 + \
+            (cst[filenumber].tv2.tv_usec - cst[filenumber].tv1.tv_usec);
+
     }
 
-    free(shm_info_array.array);
+    writeCST(cst, fileCount,shm_info_array.segsize);
+
+
+    freeEverything(&mqfd, &clsem);
+
+    
     
 
 }

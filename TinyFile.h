@@ -22,6 +22,8 @@
 
 #define MQPATH_GLOBAL "/mq_global"
 
+#define CST_FILE "./result.csv"
+
 // #define SEGSIZE 10
 #define MSGSIZE_GLOBAL 4
 #define MSGSIZE_PRIVATE 12
@@ -84,6 +86,11 @@ typedef struct shm_info_array{
     shm_info_t *array;
 } shm_info_array_t ;
 
+typedef struct cst{
+    struct timeval tv1;
+    struct timeval tv2;
+    unsigned long interval;
+} cst_t;
 
 
 
