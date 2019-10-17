@@ -5,21 +5,11 @@ $ ./configure
 $ make
 # make install
 
-Required packages:
-- gcc
-- libtool
-- make
-
 If you checked the source code from the Git repository, run
 $ ./bootstrap
 $ ./configure
 $ make
 # make install
-
-Required packages:
-- autoconf
-- libtool
-- make
 
 For more information, check the LibYAML homepage:
 'https://github.com/yaml/libyaml'.

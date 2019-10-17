@@ -5,7 +5,8 @@
 #include <stdio.h>
 #include <ctype.h>
 
-
+shm_info_array_t shm_info_array;
+    
 
 
 int initGlobalMessageQueue(mqd_t *mqfd_ptr) {
@@ -65,24 +66,27 @@ void initSemaphore(sem_t **sem_ptr, int index) {
 }
 
 
-void initSharedMem(int *shm_fd, char **shm_addr, int len) {
-    int fd = shm_open(SHMPATH, O_RDWR , 0);
+void initSharedMem(unsigned long segsize, int index) {
+    printf("1\n");
+    char shmpath[SHM_PATH_SIZE];
+    snprintf(shmpath, SHM_PATH_SIZE, "%s%d", SHMPATH, index);
+    int fd = shm_open(shmpath, O_RDWR , 0);
     if (fd == -1)
         perror("shm_open");
-
-    if (ftruncate(fd, len) == -1)
+    printf("1\n");
+    if (ftruncate(fd, segsize) == -1)
         perror("ftruncate failed");
+    printf("1\n");
                                                 /* Open existing object */
-    char *addr = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
+    char *addr = mmap(NULL, segsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
     if (addr == MAP_FAILED)
         perror("mmap");
     
 
     printf("mmap addr: %x\n", addr);
     fflush(stdout); // printf doesn't print exactly when is was called.
-
-    *shm_fd = fd;
-    *shm_addr = addr;
+    shm_info_array.array[index].fd = fd;
+    shm_info_array.array[index].addr = addr;
 
 }
 
@@ -96,9 +100,6 @@ void initClient(shm_info_t *shm_info, client_sem_t *clsem, client_mqfd_t *mqfd) 
     //TODO: remove 
     //2 semaphores per client
     initPrivateMessageQueue(&mqfd->mqfd_from_server, MQ_FROM_SERVER_INDEX);
-
-    shm_info->len = SEGSIZE;
-    initSharedMem(&shm_info->fd, &shm_info->addr, shm_info->len);
     initSemaphore(&clsem->sem_modif, SEM_MODIF_INDEX);
     initSemaphore(&clsem->sem_allow_transf, SEM_ALLOW_TRANSF_INDEX);
 
@@ -124,15 +125,32 @@ void connectToServer(client_mqfd_t *mqfd, client_sem_t *clsem) {
     // wait until server responsd. IF we do not have this, server's mq_open(mqfd_to_server) happens later than file transfer.
     // and server doesn't respond at all.
     mq_receive(mqfd->mqfd_from_server,msgbuff_from_server ,MSGSIZE_PRIVATE,0);
+    int numseg = getFilenumber(msgbuff_from_server);
+    unsigned long segsize = getSizeValue(msgbuff_from_server);
+    shm_info_array.numseg = numseg;
+    shm_info_array.segsize = segsize;
+    shm_info_t *arr = (shm_info_t *) malloc(sizeof(shm_info_t) * numseg);
+    shm_info_array.array = arr;
+
+    for (int i=0; i< numseg; i++) {
+        initSharedMem(segsize, i);
+    }
+    
+
+
 
 }
 
-void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumber) {
+void sendFile(char *path, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumber) {
 
     char msgbuff[MSGSIZE_PRIVATE];
-    char chunkbuff[SEGSIZE];
     FILE *pFile;
     unsigned long cumsize = 0;
+    unsigned long segsize = shm_info_array.segsize;
+    unsigned long onechunksize =0;
+    int numseg = shm_info_array.numseg;
+    char chunkbuff[segsize * numseg];
+
     printf("OPEN %s \n", path);
     pFile = fopen(path, "rb");
     if (pFile==NULL) {
@@ -158,7 +176,7 @@ void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_
 
     while(cumsize < filesize) {
 
-        unsigned long chunksize = fread_buf(chunkbuff, SEGSIZE, pFile);
+        unsigned long chunksize = fread_buf(chunkbuff, segsize * numseg, pFile);
         createMessage(msgbuff, filenumber, chunksize);
         // filenumber = *((int *)msgbuff); 
         // chunksize = *((unsigned long *)(msgbuff + HEADER_FNO));
@@ -168,27 +186,44 @@ void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_
         if (status == -1) {
             perror("mq_send failure\n");
         }
-        printf("msg sent to server\n");
+        printf("msg sent to server, chunksize: %lu\n", chunksize);
         
 
         sem_wait(clsem->sem_allow_transf);
-        memset(shm_info->addr, 0, SEGSIZE);
-        memcpy(shm_info->addr, chunkbuff, chunksize);
-        printf("file sent! filenumber: %d chunksize: %lu cumsize: %lu\n", filenumber, chunksize, cumsize);
+
+        for (int i=0;i<numseg; i++) {
+            onechunksize = segsize;
+            if (onechunksize > chunksize) {
+                onechunksize = chunksize;
+            }
+            memset(shm_info_array.array[i].addr, 0, segsize);
+            memcpy(shm_info_array.array[i].addr, chunkbuff + cumsize, onechunksize);
+            printf("file sent! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
+            
+            cumsize += onechunksize; 
+            chunksize -= onechunksize;
+
+            if(cumsize >= filesize) {
+                break;
+            }
+        }
+
         sem_post(clsem->sem_modif);
 
-        cumsize += chunksize; 
     }
     fclose(pFile);
 
 }
 
-int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, char *fname) {
+int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char *fname) {
 
     int filenumber;
     unsigned long filesize = 0;
     unsigned long cumsize = 0;
     unsigned long chunksize = 0;
+    unsigned long onechunksize = 0;
+    int numseg = shm_info_array.numseg;
+    unsigned int segsize = shm_info_array.segsize;
     FILE *pFile;
     char msgbuff[MSGSIZE_PRIVATE];
 
@@ -223,12 +258,26 @@ int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, cha
         sem_post(clsem->sem_allow_transf);
         sem_wait(clsem->sem_modif); 
 
+        for (int i=0;i<numseg; i++) {
+            // NOTE: chunksize is normally "numseg * segsize", onechunksize is normally "segsize"
+            //          but we need to handle non-aligned case.
+            onechunksize = segsize;
+            if(onechunksize > chunksize) { // this means chunsize < segsize, 
+                onechunksize = chunksize;
+            }
 
-        // memcpy(temp_storage + cumsize, shm_info.addr, chunksize);
-        fwrite_buf(shm_info->addr, chunksize, pFile);
+            fwrite_buf(shm_info_array.array[i].addr, onechunksize, pFile);
 
-        printf("got file! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
-        cumsize += chunksize;
+
+            printf("got file! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
+            
+            cumsize += onechunksize;
+            chunksize -= onechunksize;
+
+            if (cumsize >= filesize) {
+                break;
+            }
+        }
 
 
     }
@@ -324,14 +373,15 @@ main(int argc, char *argv[])
 //    5. server side loop will need to know whether to wait for a msg queue or send pending ones (non block)
 
 
-
     for(filenumber=0; filenumber < fileCount; filenumber++) {
         snprintf(filepath, FILENAMESIZE, "%s", fname_array[filenumber]);
         printf("%s\n", fname_array[filenumber]);
-        sendFile(filepath, &shm_info, &mqfd, &clsem, filenumber);
+        sendFile(filepath, &mqfd, &clsem, filenumber);
         snprintf(fname_array[filenumber], FILENAMESIZE,"%s.compressed",filepath);
-        recvFile(&shm_info, &mqfd, &clsem, fname_array[filenumber]);
+        recvFile(&mqfd, &clsem, fname_array[filenumber]);
     }
+
+    free(shm_info_array.array);
     
 
 }

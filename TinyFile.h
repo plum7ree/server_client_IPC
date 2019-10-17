@@ -11,7 +11,9 @@
 #include <semaphore.h>
 #include <mqueue.h>
 
-#define SHMPATH "/shm_obj1" // naming convention: /somename. Not ./somename
+#define SHMPATH "/shm_obj" // naming convention: /somename. Not ./somename
+#define SHM_PATH_SIZE 20
+
 
 #define SEMPATH_GLOBAL "/sem_global"
 #define SEMPATH "/sem_obj1"
@@ -20,7 +22,7 @@
 
 #define MQPATH_GLOBAL "/mq_global"
 
-#define SEGSIZE 10
+// #define SEGSIZE 10
 #define MSGSIZE_GLOBAL 4
 #define MSGSIZE_PRIVATE 12
 #define MAXMSGNUM 10
@@ -74,8 +76,15 @@ typedef struct client_sem {
 typedef struct shm_info {
     int fd;
     char *addr;
-    int len;
 } shm_info_t;
+
+typedef struct shm_info_array{
+    int numseg;
+    unsigned long segsize;
+    shm_info_t *array;
+} shm_info_array_t ;
+
+
 
 
 

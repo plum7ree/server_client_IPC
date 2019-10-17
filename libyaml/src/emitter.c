@@ -1227,7 +1227,7 @@ yaml_emitter_select_scalar_style(yaml_emitter_t *emitter, yaml_event_t *event)
 }
 
 /*
- * Write an anchor.
+ * Write an achor.
  */
 
 static int

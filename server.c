@@ -1,6 +1,8 @@
 #define _GNU_SOURCE 
 #include <sched.h>
 #include <sys/stat.h>
+#include <getopt.h>
+// #include <pthread.h>
 #include "./snappy-c/snappy.h"
 #include "./snappy-c/map.h"
 #include "./snappy-c/util.h"
@@ -27,8 +29,9 @@ struct clone_respond_arg {
 
 sem_t *sem_global;
 shm_info_t shm_info;
+shm_info_array_t shm_info_array;
 
-void initTinyServer(mqd_t *mqfd, char **addr);
+void initTinyServer(mqd_t *mqfd);
 void initPrivateConnection(int clpid, char *path_mq_to_server, char* path_mq_from_server, \
     char* path_sem_modif, char* path_sem_allow_transf, client_mqfd_t *mqfd, client_sem_t *clsem);
 void listenToNewConnection(mqd_t mqfd, char *msgbuff) ;
@@ -42,7 +45,7 @@ int clientHandler(void *arg) ;
 
 
 
-void initTinyServer(mqd_t *mqfd, char **addr) {
+void initTinyServer(mqd_t *mqfd) {
     struct mq_attr attr;
     attr.mq_maxmsg = MAXMSGNUM;
     attr.mq_msgsize = MSGSIZE_GLOBAL;
@@ -65,26 +68,56 @@ void initTinyServer(mqd_t *mqfd, char **addr) {
     sem_getvalue(sem_global, &val);
     printf("sem_global init vale: %d\n", val);
 
-    int fd = shm_open(SHMPATH, O_RDWR| O_CREAT, S_IRUSR | S_IWUSR); /* Open existing object */ 
+
+    // *********************new multi seg, size support*********************
+    char shmpath[SHM_PATH_SIZE];
+    int segsize = shm_info_array.segsize;
+    for (int i=0; i<shm_info_array.numseg; i++) {
+        snprintf(shmpath, SHM_PATH_SIZE, "%s%d", SHMPATH, i);
+        int fd = shm_open(shmpath, O_RDWR| O_CREAT, S_IRUSR | S_IWUSR); /* Open existing object */ 
     
 
-    if (fd == -1)
-        perror("shm_open");
-    /* Use shared memory object size as length argument for mmap() and as number of bytes to write() */
-    struct stat sb;
-    if (fstat(fd, &sb) == -1)
-        perror("fstat");
+        if (fd == -1)
+            perror("shm_open");
+        /* Use shared memory object size as length argument for mmap() and as number of bytes to write() */
+        struct stat sb;
+        if (fstat(fd, &sb) == -1)
+            perror("fstat");
 
-    char *mmap_addr = mmap(NULL, SEGSIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
-    // printf("mmap_addr: %x\n", mmap_addr);
-    // // fflush(stdout);
+        char *mmap_addr = mmap(NULL, segsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
+        // printf("mmap_addr: %x\n", mmap_addr);
+        // // fflush(stdout);
+        
+        if (mmap_addr == MAP_FAILED)
+            perror("mmap");
+
+        shm_info_array.array[i].fd = fd;
+        shm_info_array.array[i].addr = mmap_addr;
+        printf("mmap addr of index %d: %x\n", i, shm_info_array.array[i].addr);
+
+    }
+
+    // *********************previous one segsize ***********************************
+    // int fd = shm_open(SHMPATH, O_RDWR| O_CREAT, S_IRUSR | S_IWUSR); /* Open existing object */ 
     
-    if (mmap_addr == MAP_FAILED)
-        perror("mmap");
+
+    // if (fd == -1)
+    //     perror("shm_open");
+    // /* Use shared memory object size as length argument for mmap() and as number of bytes to write() */
+    // struct stat sb;
+    // if (fstat(fd, &sb) == -1)
+    //     perror("fstat");
+
+    // char *mmap_addr = mmap(NULL, SEGSIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
+    // // printf("mmap_addr: %x\n", mmap_addr);
+    // // // fflush(stdout);
+    
+    // if (mmap_addr == MAP_FAILED)
+    //     perror("mmap");
 
 
-    *addr = mmap_addr;
-    printf("server has been initialized\n");
+    // *addr = mmap_addr;
+    // printf("server has been initialized\n");
 
 }
 
@@ -130,6 +163,8 @@ void initPrivateConnection(int clpid, char *path_mq_to_server, char* path_mq_fro
 
     // tell client server is ready to recieve with just empty msg
     char msgbuff[MSGSIZE_PRIVATE];
+    // sending numseg, segsize of shared memory
+    createMessage(msgbuff, shm_info_array.numseg, shm_info_array.segsize);
     int status = mq_send(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
     if (status == -1) {
         perror("sending to client with mqfd_from_serv failure\n");
@@ -194,6 +229,10 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
     unsigned long filesize = getSizeValue(msgbuff); 
     unsigned long cumsize = 0;
     unsigned long chunksize = 0;
+    unsigned long segsize = shm_info_array.segsize;
+    int numseg = shm_info_array.numseg;
+    unsigned long onechunksize = 0;
+
     char *temp_storage = malloc(filesize);
 
     printf("new file request received! filenumber: %d filesize: %lu\n", filenumber, filesize);
@@ -214,12 +253,23 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
         sem_post(clsem->sem_allow_transf);
         sem_wait(clsem->sem_modif);
 
+        for (int i=0;i<numseg; i++) {
+            // NOTE: chunksize is normally "numseg * segsize", onechunksize is normally "segsize"
+            //          but we need to handle non-aligned case.
+            onechunksize = segsize;
+            if(onechunksize > chunksize) { // this means chunsize < segsize, 
+                onechunksize = chunksize;
+            }
+            memcpy(temp_storage + cumsize, shm_info_array.array[i].addr , onechunksize);
+            printf("got file! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
+            
+            cumsize += onechunksize;
+            chunksize -= onechunksize;
 
-        memcpy(temp_storage + cumsize, shm_info.addr, chunksize);
-        printf("got file! filenumber: %d chunksize: %lu cumsize: %lu\n", filenumber, chunksize, cumsize);
-        cumsize += chunksize;
-
-        sem_post(sem_global);
+            if (cumsize >= filesize) {
+                break;
+            }
+        }
 
     }
 
@@ -234,12 +284,15 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
     client_mqfd_t *mqfd, client_sem_t *clsem ) {
 
     unsigned long cumsize=0;
-    unsigned long  chunksize=0;
+    unsigned long chunksize=0;
+    unsigned long segsize = shm_info_array.segsize;
+    int numseg = shm_info_array.numseg;
+    unsigned long onechunksize = 0;
 
     while(cumsize < filesize) {
 
 
-        unsigned long chunksize = SEGSIZE;
+        chunksize = segsize * numseg; // int * unsigned long ok??
         if (cumsize + chunksize > filesize) {
             chunksize = filesize - cumsize;
         }
@@ -257,14 +310,29 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
         sem_wait(sem_global);
         sem_wait(clsem->sem_allow_transf);
 
-        memset(shm_info.addr, 0, SEGSIZE);
-        memcpy(shm_info.addr, temp_storage + cumsize, chunksize);
-        printf("file sent! filenumber: %d chunksize: %lu cumsize: %lu\n", filenumber, chunksize, cumsize);
+        
+        
+        for (int i=0;i<numseg; i++) {
+            onechunksize = segsize;
+            if (onechunksize > chunksize) {
+                onechunksize = chunksize;
+            }
+            memset(shm_info_array.array[i].addr, 0, segsize);
+            memcpy(shm_info_array.array[i].addr, temp_storage + cumsize, onechunksize);
+            printf("file sent! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
+            
+            cumsize += onechunksize; 
+            chunksize -= onechunksize;
+
+            if(cumsize >= filesize) {
+                break;
+            }
+        }
         
         sem_post(clsem->sem_modif);
         sem_post(sem_global);
 
-        cumsize += chunksize; 
+        
     }
     printf("end of sentToClient\n");
 }
@@ -381,9 +449,63 @@ int
 main(int argc, char *argv[])
 {
     
+    // ./server --n_sms 5 --sms_size 32
+    
+    int numseg;
+    int segsize;
+
+    int c;
+    int digit_optind = 0;
+
+    static struct option long_options[] = {
+            {"n_sms",     required_argument, 0,  0 },
+            {"sms_size",  required_argument, 0,  0 },
+            {0,         0,                 0,  0 }
+        };
+
+    while (1) {
+        int this_option_optind = optind ? optind : 1;
+        int option_index = 0;
+        
+
+        c = getopt_long(argc, argv, "", long_options, &option_index);
+        if (c == -1)
+            break;
+
+        switch (c) {
+            case 0:
+                if (!strcmp(long_options[option_index].name, "n_sms")) {
+                    numseg = atoi(optarg);
+                } 
+                else if (!strcmp(long_options[option_index].name, "sms_size")) {
+                    segsize = atoi(optarg);
+                }
+                break;
+
+            case '?':
+                printf("wrong arguments. exiting program\n");
+                exit(EXIT_SUCCESS);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    if (argc < 5) {
+        printf("too few args bro!!\n ex) ./server --n_sms 1 --sms_size 32\n");
+        exit(0);
+    }
+
+    shm_info_t arr[numseg];
+    shm_info_array.numseg = numseg;
+    shm_info_array.segsize = segsize;
+    shm_info_array.array = arr;
+
+
     client_mqfd_t mqfd;
 
-    initTinyServer(&mqfd.mqfd_global, &shm_info.addr);
+    initTinyServer(&mqfd.mqfd_global);
 
     while(1) {
         //1. check mq for new client creation
