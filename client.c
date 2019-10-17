@@ -394,12 +394,19 @@ void freeEverything(client_mqfd_t *mqfd, client_sem_t *clsem) {
     char shmpath[SHM_PATH_SIZE];
 
     for (int index=0; index<shm_info_array.numseg; index++) {
-        // DO NOT SHM_UNLINK 
+        // DO NOT SHM_UNLINK , do only close and munmap
         close(shm_info_array.array[index].fd);
         munmap(shm_info_array.array[index].addr, shm_info_array.segsize);
     }
     free(shm_info_array.array);
     // mq_unlink(MQPATH);
+
+}
+
+void disConnect(client_mqfd_t *mqfd) {
+    char msgbuff[MSGSIZE_PRIVATE];
+    createMessage(msgbuff, -1, 0);
+    mq_send(mqfd->mqfd_to_server, msgbuff, MSGSIZE_PRIVATE, 0);
 
 }
 
@@ -457,6 +464,8 @@ main(int argc, char *argv[])
             (cst[filenumber].tv2.tv_usec - cst[filenumber].tv1.tv_usec);
 
     }
+
+    disConnect(&mqfd);
 
     writeCST(cst, fileCount,shm_info_array.segsize);
 

@@ -42,7 +42,9 @@ int recvFromClient(char *msgbuff, char **temp_storage, int *fileno, unsigned lon
 void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storage, \
     client_mqfd_t *mqfd, client_sem_t *clsem );
 int clientHandler(void *arg) ;
-
+void freeSem(client_sem_t *clsem, int pid);
+void freeMQ(client_mqfd_t *mqfd, int pid);
+void freeGlobal(mqd_t mqfd_global);
 
 
 void initTinyServer(mqd_t *mqfd) {
@@ -57,8 +59,12 @@ void initTinyServer(mqd_t *mqfd) {
         exit(0);
     }
 
+    int pid=getpid();
+    char path[PRIV_SEM_PATH_SIZE];
+    snprintf(path,PRIV_SEM_PATH_SIZE, "/%s%d", SEMPATH_GLOBAL, pid);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
 
-    sem_global = sem_open(SEMPATH_GLOBAL , O_RDWR|O_CREAT, S_IRUSR | S_IWUSR, 1);
+
+    sem_global = sem_open(path , O_RDWR|O_CREAT, S_IRUSR | S_IWUSR, 1);
     if(sem_global == SEM_FAILED) {
         perror("sem global failed\n");
         exit(0);
@@ -190,7 +196,13 @@ void connectClient(char* msgbuff) {
     child_stack += STACKSIZE; //stack top, stack grows down
     struct clone_arg *arg = (struct clone_arg *) malloc(sizeof(struct clone_arg));
     memcpy(arg->msg, msgbuff, MSGSIZE_GLOBAL);
+
+    int status = 0;
     int clone_pid = clone(clientHandler, (void *)child_stack, SIGCHLD, (void *)arg);
+
+    if((clone_pid=wait(&status)) <0) {
+        perror("cannot wait on cloned pid\n");
+    }
 }
 
 
@@ -396,6 +408,8 @@ int clientHandler(void *arg) {
 //        TODO: spin new thread to handle compression and send back
         if(conn == DISCONNECT ) {
             printf("disconnecting with client\n");
+            freeSem(&clsem, clpid);
+            freeMQ(&mqfd, clpid);
             break;
         }
         printf("recieve file %d done\n", filenumber);
@@ -413,24 +427,24 @@ int clientHandler(void *arg) {
         pthread_t cThread;
         pthread_create(&cThread, NULL, clientRespondHandler, respondArg);
         continue;
-        //***********************************compress*************************************************
-        outbuff = xmalloc(snappy_max_compressed_length((size_t)filesize));
-        unsigned long compressed_size = -1 ;
-        int res = compressFile(temp_storage, filesize, &outbuff, &compressed_size);
+        // //***********************************compress*************************************************
+        // outbuff = xmalloc(snappy_max_compressed_length((size_t)filesize));
+        // unsigned long compressed_size = -1 ;
+        // int res = compressFile(temp_storage, filesize, &outbuff, &compressed_size);
 
-        //********************************SEND BACK TO CLIENT***************************************
+        // //********************************SEND BACK TO CLIENT***************************************
         
         
-        createMessage(from_serv_msgbuff, filenumber, compressed_size);
+        // createMessage(from_serv_msgbuff, filenumber, compressed_size);
 
-        int status = mq_send(mqfd.mqfd_from_server, from_serv_msgbuff, MSGSIZE_PRIVATE, 0);
-        if (status == -1) {
-            perror("sending to client with mqfd_from_serv failure\n");
-        }
-        printf("mq sent to client\n");
+        // int status = mq_send(mqfd.mqfd_from_server, from_serv_msgbuff, MSGSIZE_PRIVATE, 0);
+        // if (status == -1) {
+        //     perror("sending to client with mqfd_from_serv failure\n");
+        // }
+        // printf("mq sent to client\n");
 
 
-        sendToClient(filenumber, compressed_size, from_serv_msgbuff, temp_storage, &mqfd, &clsem);
+        // sendToClient(filenumber, compressed_size, from_serv_msgbuff, temp_storage, &mqfd, &clsem);
 
     }
     
@@ -438,11 +452,63 @@ int clientHandler(void *arg) {
     free(outbuff);
     free(temp_storage);
 
-
+    printf("handler returned \n");
     return 0 ;
 }
 
+void freeSem(client_sem_t *clsem, int pid) {
+    /******************** 2. free sem **********************/
+    char path[PRIV_SEM_PATH_SIZE];
+    sem_close(clsem->sem_modif);
+    sem_close(clsem->sem_allow_transf);
+    snprintf(path,PRIV_SEM_PATH_SIZE ,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, SEM_MODIF_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    sem_unlink(path);
+    snprintf(path,PRIV_SEM_PATH_SIZE ,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, SEM_ALLOW_TRANSF_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    sem_unlink(path);
 
+}
+
+void freeMQ(client_mqfd_t *mqfd, int pid) {
+     /******************** 1. free mq **********************/
+
+    // mqd_t mqfd_global;
+    mqd_t mqfd_to_server;
+    mqd_t mqfd_from_server;
+    // mq_close(mqfd->mqfd_global);
+    mq_close(mqfd->mqfd_to_server);
+    mq_close(mqfd->mqfd_from_server);
+
+    char msgbuff[PRIV_MQ_PATH_SIZE];
+
+    snprintf(msgbuff,PRIV_MQ_PATH_SIZE ,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, MQ_TO_SERVER_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    mq_unlink(msgbuff);
+    snprintf(msgbuff,PRIV_MQ_PATH_SIZE ,"/%0*d%0*d", (int)PATH_PID_SIZE, pid, (int)PATH_INDEX_SIZE, MQ_FROM_SERVER_INDEX);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    mq_unlink(msgbuff);
+
+}
+
+void freeGlobal(mqd_t mqfd_global) {
+    mq_close(mqfd_global);
+    // server can mq_unlink(mqfd_global)
+    mq_unlink(MQPATH_GLOBAL);
+
+    int pid=getpid();
+    char path[PRIV_SEM_PATH_SIZE];
+    snprintf(path,PRIV_SEM_PATH_SIZE, "/%s%d", SEMPATH_GLOBAL, pid);// ***IMPORTANT PRIV_MSG_PATH_SIZE : 8 ******//
+    sem_close(sem_global);
+    sem_unlink(path);
+
+    /******************** 3. free shm **********************/
+    char shmpath[SHM_PATH_SIZE];
+
+    for (int index=0; index<shm_info_array.numseg; index++) {
+        // server do SHM_UNLINK
+        snprintf(shmpath, SHM_PATH_SIZE, "%s%d", SHMPATH, index);
+        shm_unlink(shmpath);
+        close(shm_info_array.array[index].fd);
+        munmap(shm_info_array.array[index].addr, shm_info_array.segsize);
+    }
+}
 
 
 
@@ -505,6 +571,7 @@ main(int argc, char *argv[])
     shm_info_array.array = arr;
 
 
+    // we only use mqfd_global variable in this structure here.
     client_mqfd_t mqfd;
 
     initTinyServer(&mqfd.mqfd_global);
@@ -518,6 +585,7 @@ main(int argc, char *argv[])
 
 
     }
+    freeGlobal(mqfd.mqfd_global);
 
 
 
