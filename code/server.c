@@ -23,6 +23,7 @@ struct clone_respond_arg {
     int filenumber;
     client_sem_t clsem;
     client_mqfd_t mqfd;
+    int sync_mode;
 };
 
 
@@ -260,7 +261,10 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
     if (filenumber == DISCONNECT) {
         return DISCONNECT; //disconnect client
     }
-    unsigned long filesize = getSizeValue(msgbuff); 
+    if (filenumber == SYNC) {
+        return SYNC; //disconnect client
+    }
+    unsigned long filesize = getSizeValue(msgbuff);
     unsigned long cumsize = 0;
     unsigned long chunksize = 0;
     unsigned long segsize = shm_info_array.segsize;
@@ -377,7 +381,10 @@ int clientRespondHandler(void *arguments) {
     //********************************SEND BACK TO CLIENT***************************************
 
 
-    sem_wait(sem_global);
+    // LOCK ALREADY ACQUIRED OUTSIDE, IF IN SYNC MODE
+    if (!arg->sync_mode) {
+        sem_wait(sem_global);
+    }
     createMessage(arg->from_serv_msgbuff, arg->filenumber, compressed_size);
 
     int status = mq_send((arg->mqfd).mqfd_from_server, arg->from_serv_msgbuff, MSGSIZE_PRIVATE, 0);
@@ -388,14 +395,16 @@ int clientRespondHandler(void *arguments) {
 
 
     sendToClient(arg->filenumber, compressed_size, arg->from_serv_msgbuff, outbuff, &(arg->mqfd), &(arg->clsem));
-    sem_post(sem_global);
+    if (!arg->sync_mode) {
+        sem_post(sem_global);
+    }
     free(outbuff);
 }
 
 int clientHandler(void *arg) {
     int clpid = *((int *)(((struct clone_arg *)arg)->msg));
     printf("starting new thread for client pid: %d\n", clpid);
-    
+
 
     char path_mq_to_server[PRIV_MQ_PATH_SIZE]; // path prefix size should be 4 same as MSGSIZE_GLOBAL
     char path_mq_from_server[PRIV_MQ_PATH_SIZE];
@@ -417,22 +426,25 @@ int clientHandler(void *arg) {
     char from_serv_msgbuff[MSGSIZE_PRIVATE];
     pthread_t cThread[100];
     int fileCount = 0;
+    int sync_mode = 0;
 
     //************************************recv from client *************************************//
     sem_wait(sem_global);
     while(1) {
-
         int conn = recvFromClient(msgbuff, &temp_storage, &filenumber, &filesize, &mqfd, &clsem);
-//        TODO: spin new thread to handle compression and send back
         if(conn == DISCONNECT) {
             printf("Client done sending\n");
             break;
+        }
+        if(conn == SYNC) {
+            printf("Client in sync mode\n");
+            sync_mode = 1;
+            continue;
         }
         printf("Received file %d - done\n", filenumber);
         fileCount++;
 
         struct clone_respond_arg *respondArg;
-//        TODO: free this
         respondArg = malloc(sizeof(struct clone_respond_arg));
         respondArg->clsem = clsem;
         respondArg->filenumber = filenumber;
@@ -440,17 +452,23 @@ int clientHandler(void *arg) {
         respondArg->from_serv_msgbuff = from_serv_msgbuff;
         respondArg->mqfd = mqfd;
         respondArg->temp_storage = temp_storage;
+        respondArg->sync_mode = sync_mode;
 
-        pthread_create(&cThread[filenumber], NULL, clientRespondHandler, respondArg);
-        continue;
+        if (sync_mode) {
+            clientRespondHandler(respondArg);
+        } else {
+            pthread_create(&cThread[filenumber], NULL, clientRespondHandler, respondArg);
+        }
     }
     sem_post(sem_global);
 
     int i = 0;
-    while(i<fileCount) {
-        printf("Joining %d", i);
-        pthread_join(cThread[i], NULL);
-        i++;
+    if (!sync_mode) {
+        while(i<fileCount) {
+            printf("Joining %d\n", i);
+            pthread_join(cThread[i], NULL);
+            i++;
+        }
     }
     freeSem(&clsem, clpid);
     freeMQ(&mqfd, clpid);

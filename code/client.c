@@ -8,6 +8,7 @@
 
 shm_info_array_t shm_info_array; 
 cst_t cst[100];
+int sync_mode = 0;
 
 
 int initGlobalMessageQueue(mqd_t *mqfd_ptr) {
@@ -152,7 +153,17 @@ void notifyDoneSending(client_mqfd_t *mqfd) {
     if (status == -1) {
         perror("mq_send failure\n");
     }
-    printf("Signal done sending!\n");
+    printf("Sent DONE signal!\n");
+}
+
+void notifySyncMode(client_mqfd_t *mqfd) {
+    char msgbuff[MSGSIZE_PRIVATE];
+    createMessage(msgbuff, SYNC, SYNC);
+    int status = mq_send(mqfd->mqfd_to_server, msgbuff, MSGSIZE_PRIVATE,0);
+    if (status == -1) {
+        perror("mq_send failure\n");
+    }
+    printf("Sent SYNC signal!\n");
 }
 void sendFile(char *path, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumber) {
 
@@ -243,11 +254,13 @@ int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char fname_array[100][FIL
 
     // recieve first message from client : fist msg :| filenumber(4) | filesize(8)  |
     printf("wait to receive compressed file!\n");
-    status = mq_receive(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
-    if (status == -1) {
-        printf("GIVING BACK CONTROL TO MAIN THREAD\n");
-        return 0;
-    }
+    do {
+        status = mq_receive(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
+        if (!sync_mode && (status == -1)) {
+            printf("GIVING BACK CONTROL TO MAIN THREAD\n");
+            return 0;
+        }
+    } while (status == -1);
 //    if (status == -1) {
 //        perror("receiving first msg failure\n");
 //    }
@@ -435,7 +448,6 @@ void disConnect(client_mqfd_t *mqfd) {
 
 }
 
-
 int
 main(int argc, char *argv[])
 {   
@@ -449,7 +461,6 @@ main(int argc, char *argv[])
 
     client_sem_t clsem;
 
-
     char fname_array[100][FILENAMESIZE];
     int fileCount;
     int filenumber = 0;
@@ -458,6 +469,11 @@ main(int argc, char *argv[])
         if (strcmp(argv[i], "--conf") == 0) {
             fileCount = parseYAML(argv[++i], fname_array);
         }
+        if (strcmp(argv[i], "--state") == 0) {
+            if (strcmp(argv[++i], "SYNC") == 0) {
+                sync_mode = 1;
+            }
+        }
     }
 
     initClient(&clsem, &mqfd);
@@ -465,6 +481,9 @@ main(int argc, char *argv[])
 
     // ********************* cst setting*****************************//
 
+    if (sync_mode) {
+        notifySyncMode(&mqfd);
+    }
 
     for(filenumber=0; filenumber < fileCount; filenumber++) {
         snprintf(filepath, FILENAMESIZE, "%s", fname_array[filenumber]);
@@ -474,10 +493,14 @@ main(int argc, char *argv[])
 
         sendFile(filepath, &mqfd, &clsem, filenumber);
         snprintf(fname_array[filenumber], FILENAMESIZE,"../output/%s.compressed",filepath);
+        if (sync_mode) {
+            recvFile(&mqfd, &clsem, fname_array);
+        }
+
 
     }
     notifyDoneSending(&mqfd);
-    while(filenumber) {
+    while((!sync_mode) && filenumber) {
         filenumber -= recvFile(&mqfd, &clsem, fname_array);
     };
 
