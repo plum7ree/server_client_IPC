@@ -131,6 +131,15 @@ void connectToServer(client_mqfd_t *mqfd, client_sem_t *clsem) {
 
 }
 
+void notifyDoneSending(client_mqfd_t *mqfd) {
+    char msgbuff[MSGSIZE_PRIVATE];
+    createMessage(msgbuff, DISCONNECT, DISCONNECT);
+    int status = mq_send(mqfd->mqfd_to_server, msgbuff, MSGSIZE_PRIVATE,0);
+    if (status == -1) {
+        perror("mq_send failure\n");
+    }
+    printf("Signal done sending!\n");
+}
 void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumber) {
 
     char msgbuff[MSGSIZE_PRIVATE];
@@ -333,11 +342,12 @@ main(int argc, char *argv[])
         sendFile(filepath, &shm_info, &mqfd, &clsem, filenumber);
         snprintf(fname_array[filenumber], FILENAMESIZE,"%s.compressed",filepath);
     }
+    notifyDoneSending(&mqfd);
     while(filenumber) {
         filenumber -= recvFile(&shm_info, &mqfd, &clsem, fname_array);
     }
-    mq_close(&(mqfd.mqfd_from_server));
-    mq_close(&(mqfd.mqfd_to_server));
+//    mq_close(&(mqfd.mqfd_from_server));
+//    mq_close(&(mqfd.mqfd_to_server));
 
 }
 

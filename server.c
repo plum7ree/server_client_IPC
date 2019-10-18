@@ -321,12 +321,12 @@ int clientHandler(void *arg) {
 
     //************************************recv from client *************************************//
     sem_wait(sem_global);
-    while(fileCount<73) {
+    while(1) {
 
         int conn = recvFromClient(msgbuff, &temp_storage, &filenumber, &filesize, &mqfd, &clsem);
 //        TODO: spin new thread to handle compression and send back
-        if(conn == DISCONNECT ) {
-            printf("disconnecting with client\n");
+        if(conn == DISCONNECT) {
+            printf("Client done sending\n");
             break;
         }
         printf("recieve file %d done\n", filenumber);
@@ -365,6 +365,13 @@ int clientHandler(void *arg) {
 
     }
     sem_post(sem_global);
+
+    int i = 0;
+    while(i<fileCount) {
+        printf("Joining %d", i);
+        pthread_join(cThread[i], NULL);
+        i++;
+    }
 //    void* ret = NULL;
 //    while(fileCount--) {
 //        printf("WAITING %d", fileCount);
