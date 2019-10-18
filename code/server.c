@@ -304,7 +304,7 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
             }
         }
 
-        sem_post(sem_global);
+//        sem_post(sem_global);
 
     }
 
@@ -342,7 +342,7 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *compressed_
         if (status == -1) {
             perror("mq_send failure\n");
         }
-        printf("mq sent to client file %d: %d/%d\n", filenumber, cumsize, filesize);
+//        printf("mq sent to client file %d: %d/%d\n", filenumber, cumsize, filesize);
         sem_wait(clsem->sem_allow_transf);
 
         for (int i=0;i<numseg; i++) {
@@ -428,7 +428,7 @@ int clientHandler(void *arg) {
             printf("Client done sending\n");
             break;
         }
-        printf("recieve file %d done\n", filenumber);
+        printf("Received file %d - done\n", filenumber);
         fileCount++;
 
         struct clone_respond_arg *respondArg;
@@ -443,25 +443,6 @@ int clientHandler(void *arg) {
 
         pthread_create(&cThread[filenumber], NULL, clientRespondHandler, respondArg);
         continue;
-        // //***********************************compress*************************************************
-        // outbuff = xmalloc(snappy_max_compressed_length((size_t)filesize));
-        // unsigned long compressed_size = -1 ;
-        // int res = compressFile(temp_storage, filesize, &outbuff, &compressed_size);
-
-        // //********************************SEND BACK TO CLIENT***************************************
-        
-        
-        // createMessage(from_serv_msgbuff, filenumber, compressed_size);
-
-        // int status = mq_send(mqfd.mqfd_from_server, from_serv_msgbuff, MSGSIZE_PRIVATE, 0);
-        // if (status == -1) {
-        //     perror("sending to client with mqfd_from_serv failure\n");
-        // }
-        // printf("mq sent to client\n");
-
-
-        // sendToClient(filenumber, compressed_size, from_serv_msgbuff, temp_storage, &mqfd, &clsem);
-
     }
     sem_post(sem_global);
 
@@ -473,22 +454,8 @@ int clientHandler(void *arg) {
     }
     freeSem(&clsem, clpid);
     freeMQ(&mqfd, clpid);
-//    void* ret = NULL;
-//    while(fileCount--) {
-//        printf("WAITING %d", fileCount);
-//        pthread_join(cThread[fileCount], &ret);
-//    }
-
-    //*******************************************************************************************
-
-//    sleep(3);
-//    int val;
-//    sem_getvalue(sem_global, &val);
-//    printf("sem_global init vale: %d\n", val);
     free(outbuff);
     free(temp_storage);
-
-    // printf("handler returned \n");
     return 0 ;
 }
 
