@@ -26,6 +26,9 @@ debug_server:$(OBJ) server.o
 debug: debug_client debug_server
 
 clean:
-	@rm *.o client server tester
+	@rm *.o client server ../output/stress_testing_sync_1_segment.csv \
+		../output/stress_testing_sync_3_segment.csv ../output/stress_testing_sync_5_segment.csv \
+		../output/stress_testing_sync_1_segment.png ../output/stress_testing_sync_3_segment.png \
+		../output/stress_testing_sync_5_segment.png
 	@echo Cleaned!
 
