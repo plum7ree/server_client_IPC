@@ -210,7 +210,6 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
         filenumber = getFilenumber(msgbuff); 
         chunksize = getSizeValue(msgbuff); 
 
-        sem_wait(sem_global);
         sem_post(clsem->sem_allow_transf);
         sem_wait(clsem->sem_modif);
 
@@ -218,11 +217,9 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
         memcpy(temp_storage + cumsize, shm_info.addr, chunksize);
         printf("got file! filenumber: %d chunksize: %lu cumsize: %lu\n", filenumber, chunksize, cumsize);
         cumsize += chunksize;
-
-        sem_post(sem_global);
-
     }
 
+//    sem_post(sem_global);
     *fileno = filenumber;
     *filesz = filesize;
     *temp_store_ptr = temp_storage;
@@ -234,8 +231,9 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
     client_mqfd_t *mqfd, client_sem_t *clsem ) {
 
     unsigned long cumsize=0;
-    unsigned long  chunksize=0;
+    unsigned long chunksize=0;
 
+    printf("Sending file %d \n", filenumber);
     while(cumsize < filesize) {
 
 
@@ -252,17 +250,15 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
         if (status == -1) {
             perror("mq_send failure\n");
         }
-        printf("mq sent to client\n");
+        printf("mq sent to client file %d: %d/%d\n", filenumber, cumsize, filesize);
         
-        sem_wait(sem_global);
         sem_wait(clsem->sem_allow_transf);
 
         memset(shm_info.addr, 0, SEGSIZE);
         memcpy(shm_info.addr, temp_storage + cumsize, chunksize);
-        printf("file sent! filenumber: %d chunksize: %lu cumsize: %lu\n", filenumber, chunksize, cumsize);
+//        printf("file sent! filenumber: %d chunksize: %lu cumsize: %lu\n", filenumber, chunksize, cumsize);
         
         sem_post(clsem->sem_modif);
-        sem_post(sem_global);
 
         cumsize += chunksize; 
     }
@@ -280,6 +276,7 @@ int clientRespondHandler(void *arguments) {
     //********************************SEND BACK TO CLIENT***************************************
 
 
+    sem_wait(sem_global);
     createMessage(arg->from_serv_msgbuff, arg->filenumber, compressed_size);
 
     int status = mq_send((arg->mqfd).mqfd_from_server, arg->from_serv_msgbuff, MSGSIZE_PRIVATE, 0);
@@ -290,7 +287,8 @@ int clientRespondHandler(void *arguments) {
 
 
     sendToClient(arg->filenumber, compressed_size, arg->from_serv_msgbuff, arg->temp_storage, &(arg->mqfd), &(arg->clsem));
-    printf("FINISHED\n");
+    sem_post(sem_global);
+    printf("FINISHED %d\n", arg->filenumber);
     free(outbuff);
 }
 
@@ -318,10 +316,13 @@ int clientHandler(void *arg) {
     char *temp_storage; 
     char *outbuff;
     char from_serv_msgbuff[MSGSIZE_PRIVATE];
+    pthread_t cThread[100];
+    int fileCount = 0;
 
     //************************************recv from client *************************************//
-    while(1) {
-        
+    sem_wait(sem_global);
+    while(fileCount<73) {
+
         int conn = recvFromClient(msgbuff, &temp_storage, &filenumber, &filesize, &mqfd, &clsem);
 //        TODO: spin new thread to handle compression and send back
         if(conn == DISCONNECT ) {
@@ -329,6 +330,7 @@ int clientHandler(void *arg) {
             break;
         }
         printf("recieve file %d done\n", filenumber);
+        fileCount++;
 
         struct clone_respond_arg *respondArg;
 //        TODO: free this
@@ -340,8 +342,7 @@ int clientHandler(void *arg) {
         respondArg->mqfd = mqfd;
         respondArg->temp_storage = temp_storage;
 
-        pthread_t cThread;
-        pthread_create(&cThread, NULL, clientRespondHandler, respondArg);
+        pthread_create(&cThread[filenumber], NULL, clientRespondHandler, respondArg);
         continue;
         //***********************************compress*************************************************
         outbuff = xmalloc(snappy_max_compressed_length((size_t)filesize));
@@ -363,8 +364,19 @@ int clientHandler(void *arg) {
         sendToClient(filenumber, compressed_size, from_serv_msgbuff, temp_storage, &mqfd, &clsem);
 
     }
-    
-    //******************************************************************************************* 
+    sem_post(sem_global);
+//    void* ret = NULL;
+//    while(fileCount--) {
+//        printf("WAITING %d", fileCount);
+//        pthread_join(cThread[fileCount], &ret);
+//    }
+
+    //*******************************************************************************************
+
+//    sleep(3);
+//    int val;
+//    sem_getvalue(sem_global, &val);
+//    printf("sem_global init vale: %d\n", val);
     free(outbuff);
     free(temp_storage);
 

@@ -21,7 +21,7 @@ int initGlobalMessageQueue(mqd_t *mqfd_ptr) {
     return fd;
 }
 
-int initPrivateMessageQueue(mqd_t *mqfd_ptr, int index) {
+int initPrivateMessageQueue(mqd_t *mqfd_ptr, int index, int non_blocking) {
     int pid = getpid();
     char msgbuff[PRIV_MQ_PATH_SIZE];
 
@@ -34,8 +34,12 @@ int initPrivateMessageQueue(mqd_t *mqfd_ptr, int index) {
     attr.mq_maxmsg = MAXMSGNUM;
     attr.mq_msgsize = MSGSIZE_PRIVATE;
     attr.mq_flags = 0;
-
-    mqd_t fd = mq_open(msgbuff, O_RDWR | O_CREAT, 0666, &attr);
+    mqd_t fd;
+    if (non_blocking) {
+        fd = mq_open(msgbuff, O_RDWR | O_CREAT | O_NONBLOCK, 0666, &attr);
+    } else {
+        fd = mq_open(msgbuff, O_RDWR | O_CREAT, 0666, &attr);
+    }
 
     if(fd == -1) {
         perror("private mq_open failure");
@@ -92,10 +96,10 @@ void initClient(shm_info_t *shm_info, client_sem_t *clsem, client_mqfd_t *mqfd) 
     //meta data of the file (how many chunks)
     // fist msg :| filenumber(4) | filesize(8)  |
     // other msg:| filenumber(4) | chunksize(8) |
-    initPrivateMessageQueue(&mqfd->mqfd_to_server, MQ_TO_SERVER_INDEX);
+    initPrivateMessageQueue(&mqfd->mqfd_to_server, MQ_TO_SERVER_INDEX, 0);
     //TODO: remove 
     //2 semaphores per client
-    initPrivateMessageQueue(&mqfd->mqfd_from_server, MQ_FROM_SERVER_INDEX);
+    initPrivateMessageQueue(&mqfd->mqfd_from_server, MQ_FROM_SERVER_INDEX, 1);
 
     shm_info->len = SEGSIZE;
     initSharedMem(&shm_info->fd, &shm_info->addr, shm_info->len);
@@ -123,7 +127,7 @@ void connectToServer(client_mqfd_t *mqfd, client_sem_t *clsem) {
     char msgbuff_from_server[MSGSIZE_PRIVATE];
     // wait until server responsd. IF we do not have this, server's mq_open(mqfd_to_server) happens later than file transfer.
     // and server doesn't respond at all.
-    mq_receive(mqfd->mqfd_from_server,msgbuff_from_server ,MSGSIZE_PRIVATE,0);
+    while (mq_receive(mqfd->mqfd_from_server,msgbuff_from_server ,MSGSIZE_PRIVATE,0) == -1);
 
 }
 
@@ -183,9 +187,11 @@ void sendFile(char *path, shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_
 
 }
 
-int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, char *fname) {
+// return 1 if received a file, else 0
+int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, char fname_array[100][FILENAMESIZE]) {
 
     int filenumber;
+    int status;
     unsigned long filesize = 0;
     unsigned long cumsize = 0;
     unsigned long chunksize = 0;
@@ -194,27 +200,28 @@ int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, cha
 
     // recieve first message from client : fist msg :| filenumber(4) | filesize(8)  |
     printf("wait to receive compressed file!\n");
-    int status = mq_receive(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
+    status = mq_receive(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
     if (status == -1) {
-        perror("receiving first msg failure\n");
+        printf("GIVING BACK CONTROL TO MAIN THREAD\n");
+        return 0;
     }
+//    if (status == -1) {
+//        perror("receiving first msg failure\n");
+//    }
 
     filenumber = getFilenumber(msgbuff);
     filesize = getSizeValue(msgbuff); 
     printf("new file request recved! filenumber: %d filesize: %lu\n", filenumber, filesize);
-
-
-    pFile = fopen(fname, "wb+");
+    pFile = fopen(fname_array[filenumber], "wb+");
     // char *temp_storage = malloc(filesize);  
 
 
     // start read file chunk and store
     while(cumsize < filesize) {
         // real chunk info : | filenumber(4) : int | chunksize(8)  :unsigned long |
-        int status = mq_receive(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
-        if (status == -1) {
-            perror("receiving file chunk msg failure\n");
-        }
+        do {
+            status = mq_receive(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
+        } while(status == -1);
 
         filenumber = getFilenumber(msgbuff); 
         chunksize = getSizeValue(msgbuff); 
@@ -227,15 +234,16 @@ int recvFile(shm_info_t *shm_info, client_mqfd_t *mqfd, client_sem_t *clsem, cha
         // memcpy(temp_storage + cumsize, shm_info.addr, chunksize);
         fwrite_buf(shm_info->addr, chunksize, pFile);
 
-        printf("got file! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
+        printf("got file! filenumber: %d chunksize: %lu, total: %lu\n", filenumber, chunksize, cumsize);
         cumsize += chunksize;
 
 
     }
+    printf("Done receiving file %d: %d/%d\n", filenumber, cumsize, filesize);
     fclose(pFile);
 
 
-    return filenumber;
+    return 1;
 }
 
 
@@ -317,12 +325,6 @@ main(int argc, char *argv[])
     connectToServer(&mqfd, &clsem);
 
 
-//    1. convert each file into a struct to keep state
-//    2. mq_receive will use nonblocking (maybe try the timed version first)
-//    3. server side will need to convert file compression into another thread
-//    4. server side will need to convert id to pid + fileid
-//    5. server side loop will need to know whether to wait for a msg queue or send pending ones (non block)
-
 
 
     for(filenumber=0; filenumber < fileCount; filenumber++) {
@@ -330,9 +332,12 @@ main(int argc, char *argv[])
         printf("%s\n", fname_array[filenumber]);
         sendFile(filepath, &shm_info, &mqfd, &clsem, filenumber);
         snprintf(fname_array[filenumber], FILENAMESIZE,"%s.compressed",filepath);
-        recvFile(&shm_info, &mqfd, &clsem, fname_array[filenumber]);
     }
-    
+    while(filenumber) {
+        filenumber -= recvFile(&shm_info, &mqfd, &clsem, fname_array);
+    }
+    mq_close(&(mqfd.mqfd_from_server));
+    mq_close(&(mqfd.mqfd_to_server));
 
 }
 
