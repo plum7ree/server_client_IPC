@@ -283,7 +283,6 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
         filenumber = getFilenumber(msgbuff); 
         chunksize = getSizeValue(msgbuff); 
 
-        sem_wait(sem_global);
         sem_post(clsem->sem_allow_transf);
         sem_wait(clsem->sem_modif);
 
@@ -309,6 +308,7 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
 
     }
 
+//    sem_post(sem_global);
     *fileno = filenumber;
     *filesz = filesize;
     *temp_store_ptr = temp_storage;
@@ -325,6 +325,7 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *compressed_
     int numseg = shm_info_array.numseg;
     unsigned long onechunksize = 0;
 
+    printf("Sending file %d \n", filenumber);
     while(cumsize < filesize) {
 
 
@@ -341,13 +342,9 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *compressed_
         if (status == -1) {
             perror("mq_send failure\n");
         }
-        // printf("mq sent to client\n");
-        
-        sem_wait(sem_global);
+        printf("mq sent to client file %d: %d/%d\n", filenumber, cumsize, filesize);
         sem_wait(clsem->sem_allow_transf);
 
-        
-        
         for (int i=0;i<numseg; i++) {
             onechunksize = segsize;
             if (onechunksize > chunksize) {
@@ -356,19 +353,15 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *compressed_
             memset(shm_info_array.array[i].addr, 0, segsize);
             memcpy(shm_info_array.array[i].addr, compressed_buffer + cumsize, onechunksize);
             // printf("file sent! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
-            
-            cumsize += onechunksize; 
+            cumsize += onechunksize;
             chunksize -= onechunksize;
 
             if(cumsize >= filesize) {
                 break;
             }
         }
-        
         sem_post(clsem->sem_modif);
-        sem_post(sem_global);
 
-        
     }
     // printf("end of sentToClient\n");
 }
@@ -384,6 +377,7 @@ int clientRespondHandler(void *arguments) {
     //********************************SEND BACK TO CLIENT***************************************
 
 
+    sem_wait(sem_global);
     createMessage(arg->from_serv_msgbuff, arg->filenumber, compressed_size);
 
     int status = mq_send((arg->mqfd).mqfd_from_server, arg->from_serv_msgbuff, MSGSIZE_PRIVATE, 0);
@@ -394,7 +388,7 @@ int clientRespondHandler(void *arguments) {
 
 
     sendToClient(arg->filenumber, compressed_size, arg->from_serv_msgbuff, outbuff, &(arg->mqfd), &(arg->clsem));
-    printf("FINISHED\n");
+    sem_post(sem_global);
     free(outbuff);
 }
 
@@ -407,7 +401,6 @@ int clientHandler(void *arg) {
     char path_mq_from_server[PRIV_MQ_PATH_SIZE];
     char path_sem_modif[PRIV_SEM_PATH_SIZE];
     char path_sem_allow_transf[PRIV_SEM_PATH_SIZE];
-//    TODO: create a semaphore to lock queue
 
 
     client_mqfd_t mqfd;
@@ -422,19 +415,21 @@ int clientHandler(void *arg) {
     char *temp_storage; 
     char *outbuff;
     char from_serv_msgbuff[MSGSIZE_PRIVATE];
+    pthread_t cThread[100];
+    int fileCount = 0;
 
     //************************************recv from client *************************************//
+    sem_wait(sem_global);
     while(1) {
-        
+
         int conn = recvFromClient(msgbuff, &temp_storage, &filenumber, &filesize, &mqfd, &clsem);
 //        TODO: spin new thread to handle compression and send back
-        if(conn == DISCONNECT ) {
-            printf("disconnecting with client\n");
-            freeSem(&clsem, clpid);
-            freeMQ(&mqfd, clpid);
+        if(conn == DISCONNECT) {
+            printf("Client done sending\n");
             break;
         }
-        // printf("recieve file %d done\n", filenumber);
+        printf("recieve file %d done\n", filenumber);
+        fileCount++;
 
         struct clone_respond_arg *respondArg;
 //        TODO: free this
@@ -446,8 +441,7 @@ int clientHandler(void *arg) {
         respondArg->mqfd = mqfd;
         respondArg->temp_storage = temp_storage;
 
-        pthread_t cThread;
-        pthread_create(&cThread, NULL, clientRespondHandler, respondArg);
+        pthread_create(&cThread[filenumber], NULL, clientRespondHandler, respondArg);
         continue;
         // //***********************************compress*************************************************
         // outbuff = xmalloc(snappy_max_compressed_length((size_t)filesize));
@@ -469,8 +463,28 @@ int clientHandler(void *arg) {
         // sendToClient(filenumber, compressed_size, from_serv_msgbuff, temp_storage, &mqfd, &clsem);
 
     }
-    
-    //******************************************************************************************* 
+    sem_post(sem_global);
+
+    int i = 0;
+    while(i<fileCount) {
+        printf("Joining %d", i);
+        pthread_join(cThread[i], NULL);
+        i++;
+    }
+    freeSem(&clsem, clpid);
+    freeMQ(&mqfd, clpid);
+//    void* ret = NULL;
+//    while(fileCount--) {
+//        printf("WAITING %d", fileCount);
+//        pthread_join(cThread[fileCount], &ret);
+//    }
+
+    //*******************************************************************************************
+
+//    sleep(3);
+//    int val;
+//    sem_getvalue(sem_global, &val);
+//    printf("sem_global init vale: %d\n", val);
     free(outbuff);
     free(temp_storage);
 
