@@ -169,7 +169,7 @@ void sendFile(char *path, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumb
     if (status == -1) {
         perror("mq_send failure\n");
     }
-    printf("first msg sent!\n");
+    // printf("first msg sent!\n");
 
     while(cumsize < filesize) {
 
@@ -183,7 +183,7 @@ void sendFile(char *path, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumb
         if (status == -1) {
             perror("mq_send failure\n");
         }
-        printf("msg sent to server, chunksize: %lu\n", chunksize);
+        // printf("msg sent to server, chunksize: %lu\n", chunksize);
         
 
         sem_wait(clsem->sem_allow_transf);
@@ -195,7 +195,7 @@ void sendFile(char *path, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumb
             }
             memset(shm_info_array.array[i].addr, 0, segsize);
             memcpy(shm_info_array.array[i].addr, chunkbuff + i*segsize, onechunksize); // cumsize must be zero when i =0!
-            printf("file sent! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
+            // printf("file sent! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
             
             cumsize += onechunksize; 
             chunksize -= onechunksize;
@@ -233,7 +233,7 @@ int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char *fname) {
 
     filenumber = getFilenumber(msgbuff);
     filesize = getSizeValue(msgbuff); 
-    printf("new file request recved! filenumber: %d filesize: %lu\n", filenumber, filesize);
+    // printf("new file request recved! filenumber: %d filesize: %lu\n", filenumber, filesize);
 
 
     pFile = fopen(fname, "wb+");
@@ -250,7 +250,7 @@ int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char *fname) {
 
         filenumber = getFilenumber(msgbuff); 
         chunksize = getSizeValue(msgbuff); 
-        printf("got msg chunk! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
+        // printf("got msg chunk! filenumber: %d chunksize: %lu\n", filenumber, chunksize);
 
         sem_post(clsem->sem_allow_transf);
         sem_wait(clsem->sem_modif); 
@@ -266,7 +266,7 @@ int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char *fname) {
             fwrite_buf(shm_info_array.array[i].addr, onechunksize, pFile);
 
 
-            printf("got file! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
+            // printf("got file! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
             
             cumsize += onechunksize;
             chunksize -= onechunksize;
@@ -343,19 +343,20 @@ int parseYAML(char* path, char files[][FILENAMESIZE]) {
 
 void writeCST(cst_t *cst, int fileCount, unsigned long segsize) {
 
-    unsigned long sum = 0;
-    unsigned long cst_avg = 0;
+    float sum = 0;
+    // float cst_avg = 0;
     for(int i=0; i<fileCount; i++) {
         sum += cst[i].interval;
     }
+    sum = sum / 1000000;
 
-    cst_avg = sum / (unsigned long) fileCount;
+    // cst_avg = sum / (float) fileCount;
     char csvfile[60];
     char *fmt = "../output/stress_testing_sync_%d_segment.csv";
     snprintf(csvfile, 60, fmt, shm_info_array.numseg);
 
     FILE *pfile = fopen(csvfile, "a+");
-    fprintf(pfile, "%lu,%lu\n", cst_avg, segsize);
+    fprintf(pfile, "%.2f,%lu\n", sum, segsize);
     fclose(pfile);
 
 
@@ -465,8 +466,8 @@ main(int argc, char *argv[])
 
 
         gettimeofday(&cst[filenumber].tv2, NULL);
-        cst[filenumber].interval = (float)(cst[filenumber].tv2.tv_sec - cst[filenumber].tv1.tv_sec) + \
-            (float)(cst[filenumber].tv2.tv_usec - cst[filenumber].tv1.tv_usec)*0.000001;
+        cst[filenumber].interval = (float)(cst[filenumber].tv2.tv_sec - cst[filenumber].tv1.tv_sec)*1000000 + \
+            (float)(cst[filenumber].tv2.tv_usec - cst[filenumber].tv1.tv_usec);
 
     }
 
