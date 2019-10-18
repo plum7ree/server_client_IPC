@@ -478,7 +478,7 @@ main(int argc, char *argv[])
 
     freeEverything(&mqfd, &clsem);
 
-    
+    printf("CLIENT DONE\n");
     
 
 }
