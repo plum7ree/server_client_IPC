@@ -3,9 +3,9 @@
 #include <sys/stat.h>
 #include <getopt.h>
 // #include <pthread.h>
-#include "./snappy-c/snappy.h"
-#include "./snappy-c/map.h"
-#include "./snappy-c/util.h"
+#include "../snappy-c/snappy.h"
+#include "../snappy-c/map.h"
+#include "../snappy-c/util.h"
 
 #include "TinyFile.h"
 
@@ -39,7 +39,7 @@ void connectClient(char* msgbuff) ;
 int compressFile(char *input, unsigned long filesize, char **output, unsigned long *outsize) ;
 int recvFromClient(char *msgbuff, char **temp_storage, int *fileno, unsigned long *filesz, \
     client_mqfd_t *mqfd, client_sem_t *clsem); 
-void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storage, \
+void sendToClient(int filenumber, int filesize, char *msgbuff, char *compressed_buffer, \
     client_mqfd_t *mqfd, client_sem_t *clsem );
 int clientHandler(void *arg) ;
 void freeSem(client_sem_t *clsem, int pid);
@@ -211,15 +211,37 @@ int compressFile(char *input, unsigned long filesize, char **outbuff, unsigned l
     struct snappy_env env;
     snappy_init_env(&env);
 
-    int err = snappy_compress(&env, input, (size_t) filesize, *outbuff, (size_t *)compressed_size);       
+    int err = snappy_compress(&env, input, (size_t) filesize, *outbuff, (size_t *)compressed_size);
+
     if (err) {
         free(*outbuff);
         printf("compression of failed:\n");
         return 0;
     }
+
+    // char testbuf[filesize];
+    // err = snappy_uncompress(*outbuff, *compressed_size, testbuf);
+
+    // if (err) {
+    //     printf("uncompression ailed: %d\n", err);
+    // }
+
+    // if (memcmp(testbuf, input, filesize)) {
+    //     int o = compare(testbuf, input, filesize);           
+    //     if (o >= 0) {
+    //         printf("final comparision failed\n");
+    //     }
+    // }
     printf("compression successful original: %u new: %u\n", (size_t) filesize, (size_t)  *compressed_size);
 
+
     snappy_free_env(&env);
+
+    // FILE *pfile = fopen("./example.compressed", "w+");
+    // fwrite_buf(*outbuff, *compressed_size, pfile);
+    // fclose(pfile);
+
+
 
     return 1;
 }
@@ -247,7 +269,7 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
 
     char *temp_storage = malloc(filesize);
 
-    printf("new file request received! filenumber: %d filesize: %lu\n", filenumber, filesize);
+    // printf("new file request received! filenumber: %d filesize: %lu\n", filenumber, filesize);
 
 
     // start read file chunk and store
@@ -273,7 +295,7 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
                 onechunksize = chunksize;
             }
             memcpy(temp_storage + cumsize, shm_info_array.array[i].addr , onechunksize);
-            printf("got file! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
+            // printf("got file! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
             
             cumsize += onechunksize;
             chunksize -= onechunksize;
@@ -294,7 +316,7 @@ int recvFromClient(char *msgbuff, char **temp_store_ptr, int *fileno, unsigned l
     return 1;
 }
 
-void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storage, \
+void sendToClient(int filenumber, int filesize, char *msgbuff, char *compressed_buffer, \
     client_mqfd_t *mqfd, client_sem_t *clsem ) {
 
     unsigned long cumsize=0;
@@ -319,7 +341,7 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
         if (status == -1) {
             perror("mq_send failure\n");
         }
-        printf("mq sent to client\n");
+        // printf("mq sent to client\n");
         
         sem_wait(sem_global);
         sem_wait(clsem->sem_allow_transf);
@@ -332,8 +354,8 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
                 onechunksize = chunksize;
             }
             memset(shm_info_array.array[i].addr, 0, segsize);
-            memcpy(shm_info_array.array[i].addr, temp_storage + cumsize, onechunksize);
-            printf("file sent! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
+            memcpy(shm_info_array.array[i].addr, compressed_buffer + cumsize, onechunksize);
+            // printf("file sent! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
             
             cumsize += onechunksize; 
             chunksize -= onechunksize;
@@ -348,7 +370,7 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *temp_storag
 
         
     }
-    printf("end of sentToClient\n");
+    // printf("end of sentToClient\n");
 }
 
 
@@ -356,7 +378,7 @@ int clientRespondHandler(void *arguments) {
     struct clone_respond_arg *arg = (struct clone_respond_arg*) arguments;
     char *outbuff;
     outbuff = xmalloc(snappy_max_compressed_length((size_t)arg->filesize));
-    unsigned long compressed_size = -1 ;
+    unsigned long compressed_size = 0;
     int res = compressFile(arg->temp_storage, arg->filesize, &outbuff, &compressed_size);
 
     //********************************SEND BACK TO CLIENT***************************************
@@ -368,10 +390,10 @@ int clientRespondHandler(void *arguments) {
     if (status == -1) {
         perror("sending to client with mqfd_from_serv failure\n");
     }
-    printf("mq sent to client\n");
+    // printf("mq sent to client\n");
 
 
-    sendToClient(arg->filenumber, compressed_size, arg->from_serv_msgbuff, arg->temp_storage, &(arg->mqfd), &(arg->clsem));
+    sendToClient(arg->filenumber, compressed_size, arg->from_serv_msgbuff, outbuff, &(arg->mqfd), &(arg->clsem));
     printf("FINISHED\n");
     free(outbuff);
 }
@@ -412,7 +434,7 @@ int clientHandler(void *arg) {
             freeMQ(&mqfd, clpid);
             break;
         }
-        printf("recieve file %d done\n", filenumber);
+        // printf("recieve file %d done\n", filenumber);
 
         struct clone_respond_arg *respondArg;
 //        TODO: free this
@@ -452,7 +474,7 @@ int clientHandler(void *arg) {
     free(outbuff);
     free(temp_storage);
 
-    printf("handler returned \n");
+    // printf("handler returned \n");
     return 0 ;
 }
 
@@ -576,7 +598,7 @@ main(int argc, char *argv[])
 
     initTinyServer(&mqfd.mqfd_global);
 
-    while(1) {
+    // while(1) {
         //1. check mq for new client creation
         char msgbuff[MSGSIZE_GLOBAL];
         listenToNewConnection(mqfd.mqfd_global, msgbuff);
@@ -584,7 +606,7 @@ main(int argc, char *argv[])
         connectClient(msgbuff);
 
 
-    }
+    // }
     freeGlobal(mqfd.mqfd_global);
 
 
