@@ -1,4 +1,4 @@
-#include <yaml.h>
+#include "yaml.h"
 #include <assert.h>
 
 #include "TinyFile.h"
@@ -345,9 +345,9 @@ main(int argc, char *argv[])
     notifyDoneSending(&mqfd);
     while(filenumber) {
         filenumber -= recvFile(&shm_info, &mqfd, &clsem, fname_array);
-    }
-//    mq_close(&(mqfd.mqfd_from_server));
-//    mq_close(&(mqfd.mqfd_to_server));
+    };
+    mq_close(mqfd.mqfd_from_server);
+    mq_close(mqfd.mqfd_to_server);
 
 }
 
