@@ -1,4 +1,4 @@
-CC = gcc
+CC = gcc 
 SRC= TinyFile.c ../snappy-c/snappy.c ../snappy-c/map.c ../snappy-c/util.c
 OBJ= $(SRC:.c=.o)
 LIBS = -lrt -pthread -lyaml

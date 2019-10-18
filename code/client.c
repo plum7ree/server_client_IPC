@@ -194,7 +194,7 @@ void sendFile(char *path, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumb
                 onechunksize = chunksize;
             }
             memset(shm_info_array.array[i].addr, 0, segsize);
-            memcpy(shm_info_array.array[i].addr, chunkbuff + cumsize, onechunksize);
+            memcpy(shm_info_array.array[i].addr, chunkbuff + i*segsize, onechunksize); // cumsize must be zero when i =0!
             printf("file sent! filenumber: %d chunksize: %lu chunkindex: %d cumsize: %lu\n", filenumber, onechunksize, i, cumsize);
             
             cumsize += onechunksize; 
