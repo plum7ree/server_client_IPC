@@ -21,7 +21,7 @@ for i in [1] :
 	plt.xticks(xaxis, names)
 
 
-	plt.savefig("../output/simple.png")
+	plt.savefig("../output/simple_graph.png")
 	f.close()
 
 
