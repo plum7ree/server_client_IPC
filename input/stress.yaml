@@ -11,30 +11,16 @@ REQUESTS:
   - FILE_TYPE : ../input/Tiny.txt
   - FILE_TYPE : ../input/Tiny.txt
   - FILE_TYPE : ../input/Tiny.txt
-
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-  # - FILE_TYPE : ../input/Tiny.txt
-
-
+  - FILE_TYPE : ../input/Tiny.txt
+  - FILE_TYPE : ../input/Tiny.txt
+  - FILE_TYPE : ../input/Tiny.txt
+  - FILE_TYPE : ../input/Tiny.txt
+  - FILE_TYPE : ../input/Tiny.txt
+  - FILE_TYPE : ../input/Tiny.txt
+  - FILE_TYPE : ../input/Tiny.txt
+  - FILE_TYPE : ../input/Tiny.txt
+  - FILE_TYPE : ../input/Tiny.txt
+  - FILE_TYPE : ../input/Tiny.txt
 
   - FILE_TYPE : ../input/Small.jpg
   - FILE_TYPE : ../input/Small.jpg
@@ -46,31 +32,16 @@ REQUESTS:
   - FILE_TYPE : ../input/Small.jpg
   - FILE_TYPE : ../input/Small.jpg
   - FILE_TYPE : ../input/Small.jpg
-
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-  # - FILE_TYPE : ../input/Small.jpg
-
-
-  
+  - FILE_TYPE : ../input/Small.jpg
+  - FILE_TYPE : ../input/Small.jpg
+  - FILE_TYPE : ../input/Small.jpg
+  - FILE_TYPE : ../input/Small.jpg
+  - FILE_TYPE : ../input/Small.jpg
+  - FILE_TYPE : ../input/Small.jpg
+  - FILE_TYPE : ../input/Small.jpg
+  - FILE_TYPE : ../input/Small.jpg
+  - FILE_TYPE : ../input/Small.jpg
+  - FILE_TYPE : ../input/Small.jpg
 
   - FILE_TYPE : ../input/Medium.pdf
   - FILE_TYPE : ../input/Medium.pdf
@@ -82,30 +53,16 @@ REQUESTS:
   - FILE_TYPE : ../input/Medium.pdf
   - FILE_TYPE : ../input/Medium.pdf
   - FILE_TYPE : ../input/Medium.pdf
-
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-  # - FILE_TYPE : ../input/Medium.pdf
-
-
+  - FILE_TYPE : ../input/Medium.pdf
+  - FILE_TYPE : ../input/Medium.pdf
+  - FILE_TYPE : ../input/Medium.pdf
+  - FILE_TYPE : ../input/Medium.pdf
+  - FILE_TYPE : ../input/Medium.pdf
+  - FILE_TYPE : ../input/Medium.pdf
+  - FILE_TYPE : ../input/Medium.pdf
+  - FILE_TYPE : ../input/Medium.pdf
+  - FILE_TYPE : ../input/Medium.pdf
+  - FILE_TYPE : ../input/Medium.pdf
 
   - FILE_TYPE : ../input/Large.txt
   - FILE_TYPE : ../input/Large.txt
@@ -117,30 +74,16 @@ REQUESTS:
   - FILE_TYPE : ../input/Large.txt
   - FILE_TYPE : ../input/Large.txt
   - FILE_TYPE : ../input/Large.txt
-
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-  # - FILE_TYPE : ../input/Large.txt
-
-
+  - FILE_TYPE : ../input/Large.txt
+  - FILE_TYPE : ../input/Large.txt
+  - FILE_TYPE : ../input/Large.txt
+  - FILE_TYPE : ../input/Large.txt
+  - FILE_TYPE : ../input/Large.txt
+  - FILE_TYPE : ../input/Large.txt
+  - FILE_TYPE : ../input/Large.txt
+  - FILE_TYPE : ../input/Large.txt
+  - FILE_TYPE : ../input/Large.txt
+  - FILE_TYPE : ../input/Large.txt
 
   - FILE_TYPE : ../input/Huge.jpg
   - FILE_TYPE : ../input/Huge.jpg
@@ -152,27 +95,13 @@ REQUESTS:
   - FILE_TYPE : ../input/Huge.jpg
   - FILE_TYPE : ../input/Huge.jpg
   - FILE_TYPE : ../input/Huge.jpg
-
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-  # - FILE_TYPE : ../input/Huge.jpg
-
-
+  - FILE_TYPE : ../input/Huge.jpg
+  - FILE_TYPE : ../input/Huge.jpg
+  - FILE_TYPE : ../input/Huge.jpg
+  - FILE_TYPE : ../input/Huge.jpg
+  - FILE_TYPE : ../input/Huge.jpg
+  - FILE_TYPE : ../input/Huge.jpg
+  - FILE_TYPE : ../input/Huge.jpg
+  - FILE_TYPE : ../input/Huge.jpg
+  - FILE_TYPE : ../input/Huge.jpg
+  - FILE_TYPE : ../input/Huge.jpg
