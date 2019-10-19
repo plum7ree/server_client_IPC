@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 
 
-for i in [1,3,5] :
-	xaxis = [x for x in range(1,10)]
+for i in [1] :
+	xaxis = [x for x in range(1,6)]
 	names = []
 	values = []
-	with open("../output/stress_testing_sync_" + str(i) + "_segment.csv", "r") as f:
+	with open("../output/simple.csv", "r") as f:
 	    for line in f:
 	        cst, sms_size = line.split(",")
 	        names.append(sms_size.strip());
@@ -13,11 +13,15 @@ for i in [1,3,5] :
 	print(names)
 	print(values)
 	plt.figure()
+	plt.title('CST for different file size')
+	plt.xlabel('file size')
+	plt.ylabel('usecond')
+
 	plt.bar(xaxis, values, align="center")
 	plt.xticks(xaxis, names)
 
 
-	plt.savefig("../output/stress_testing_sync_" + str(i) + "_segment.png")
+	plt.savefig("../output/simple.png")
 	f.close()
 
 

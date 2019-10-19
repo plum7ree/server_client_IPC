@@ -186,7 +186,7 @@ void sendFile(char *path, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumb
     unsigned long filesize = ftell (pFile);
     sprintf(chunkbuff, "%lu", filesize);
     rewind (pFile);
-    printf("file size: %lu\n", filesize);
+    // printf("file size: %lu\n", filesize);
 
 
     // protocol : | filenumber (4bytes) | filesize (8) |
@@ -253,11 +253,11 @@ int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char fname_array[100][FIL
     char msgbuff[MSGSIZE_PRIVATE];
 
     // recieve first message from client : fist msg :| filenumber(4) | filesize(8)  |
-    printf("wait to receive compressed file!\n");
+    // printf("wait to receive compressed file!\n");
     do {
         status = mq_receive(mqfd->mqfd_from_server, msgbuff, MSGSIZE_PRIVATE, 0);
         if (!sync_mode && (status == -1)) {
-            printf("GIVING BACK CONTROL TO MAIN THREAD\n");
+            // printf("GIVING BACK CONTROL TO MAIN THREAD\n");
             return 0;
         }
     } while (status == -1);
@@ -267,7 +267,7 @@ int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char fname_array[100][FIL
 
     filenumber = getFilenumber(msgbuff);
     filesize = getSizeValue(msgbuff); 
-    printf("new file request recved! filenumber: %d filesize: %lu\n", filenumber, filesize);
+    // printf("new file request recved! filenumber: %d filesize: %lu\n", filenumber, filesize);
     pFile = fopen(fname_array[filenumber], "wb+");
     // char *temp_storage = malloc(filesize);  
 
@@ -301,7 +301,7 @@ int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char fname_array[100][FIL
             cumsize += onechunksize;
             chunksize -= onechunksize;
 
-            printf("got file! filenumber: %d chunksize: %lu, total: %lu\n", filenumber, chunksize, cumsize);
+            // printf("got file! filenumber: %d chunksize: %lu, total: %lu\n", filenumber, chunksize, cumsize);
             if (cumsize >= filesize) {
                 break;
             }
@@ -309,7 +309,7 @@ int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char fname_array[100][FIL
 
 
     }
-    printf("Done receiving file %d: %d/%d\n", filenumber, cumsize, filesize);
+    // printf("Done receiving file %d: %d/%d\n", filenumber, cumsize, filesize);
     fclose(pFile);
 
 
@@ -380,22 +380,65 @@ int parseYAML(char* path, char files[][FILENAMESIZE]) {
 }
 
 void writeCST(cst_t *cst, int fileCount, unsigned long segsize) {
+    int nfileType = 5;
 
-    float sum = 0;
-    // float cst_avg = 0;
-    for(int i=0; i<fileCount; i++) {
-        sum += cst[i].interval;
+
+    if(fileCount <= nfileType) {
+        //******************* SIMPLE TEST****************************
+        char csvfile[60];
+        char *fmt = "../output/simple.csv";
+        snprintf(csvfile, 60, fmt, shm_info_array.numseg);
+
+        FILE *pfile = fopen(csvfile, "a+");
+        char filetype[5][10] = {"tiny","small","medium","large","huge"};
+
+        float sum = 0;
+        // float cst_avg = 0;
+        for(int i=0; i<fileCount; i++) {
+            sum = cst[i].interval;
+            fprintf(pfile, "%f,%s\n", sum, filetype[i]);
+        }
+        // sum = sum / 1000000;
+
+        // cst_avg = sum / (float) fileCount;
+        
+        
+        fclose(pfile);
+
+    } else {
+        //********************* STRESS TEST****************************
+        int nfile_per_type = 10;
+
+        float sum = 0;
+        char csvfile[60];
+        char *fmt;
+        if (sync_mode){
+            fmt = "../output/stress_testing_sync_%d_segment.csv";
+        } else {
+            fmt = "../output/stress_testing_async_%d_segment.csv";
+        }
+        
+        snprintf(csvfile, 60, fmt, shm_info_array.numseg);
+
+        FILE *pfile = fopen(csvfile, "a+");
+
+
+        // float cst_avg = 0;
+        for(int i=0; i<(fileCount/nfile_per_type); i++) {
+            for (int j=0; j < nfile_per_type; j++) {
+                sum += cst[i].interval;
+            }
+            sum = sum / 1000000;
+            fprintf(pfile, "%.2f,%lu\n", sum, segsize);
+            sum = 0;
+        }
+        
+
+        // cst_avg = sum / (float) fileCount;
+        
+        
+        fclose(pfile);
     }
-    sum = sum / 1000000;
-
-    // cst_avg = sum / (float) fileCount;
-    char csvfile[60];
-    char *fmt = "../output/stress_testing_sync_%d_segment.csv";
-    snprintf(csvfile, 60, fmt, shm_info_array.numseg);
-
-    FILE *pfile = fopen(csvfile, "a+");
-    fprintf(pfile, "%.2f,%lu\n", sum, segsize);
-    fclose(pfile);
 
 
 }

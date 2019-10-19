@@ -186,7 +186,7 @@ void listenToNewConnection(mqd_t mqfd, char *msgbuff) {
     if (status == -1) {
         perror("global mq_receive failure\n");
     }
-    printf("recieved message from global queue\n");
+    // printf("recieved message from global queue\n");
 }
 
 void connectClient(char* msgbuff) {
@@ -233,7 +233,7 @@ int compressFile(char *input, unsigned long filesize, char **outbuff, unsigned l
     //         printf("final comparision failed\n");
     //     }
     // }
-    printf("compression successful original: %u new: %u\n", (size_t) filesize, (size_t)  *compressed_size);
+    // printf("compression successful original: %u new: %u\n", (size_t) filesize, (size_t)  *compressed_size);
 
 
     snappy_free_env(&env);
@@ -329,7 +329,7 @@ void sendToClient(int filenumber, int filesize, char *msgbuff, char *compressed_
     int numseg = shm_info_array.numseg;
     unsigned long onechunksize = 0;
 
-    printf("Sending file %d \n", filenumber);
+    // printf("Sending file %d \n", filenumber);
     while(cumsize < filesize) {
 
 
@@ -403,7 +403,7 @@ int clientRespondHandler(void *arguments) {
 
 int clientHandler(void *arg) {
     int clpid = *((int *)(((struct clone_arg *)arg)->msg));
-    printf("starting new thread for client pid: %d\n", clpid);
+    // printf("starting new thread for client pid: %d\n", clpid);
 
 
     char path_mq_to_server[PRIV_MQ_PATH_SIZE]; // path prefix size should be 4 same as MSGSIZE_GLOBAL
@@ -441,7 +441,7 @@ int clientHandler(void *arg) {
             sync_mode = 1;
             continue;
         }
-        printf("Received file %d - done\n", filenumber);
+        // printf("Received file %d - done\n", filenumber);
         fileCount++;
 
         struct clone_respond_arg *respondArg;
@@ -465,7 +465,7 @@ int clientHandler(void *arg) {
     int i = 0;
     if (!sync_mode) {
         while(i<fileCount) {
-            printf("Joining %d\n", i);
+            // printf("Joining %d\n", i);
             pthread_join(cThread[i], NULL);
             i++;
         }
