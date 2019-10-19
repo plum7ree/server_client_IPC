@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export LD_LIBRARY_PATH=./
+
 client_simple() {
   sleep 1.5
   ./client --conf ../input/simple.yaml --state SYNC
