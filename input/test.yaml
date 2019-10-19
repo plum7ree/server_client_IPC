@@ -1,0 +1,4 @@
+EXPERIMENT_TYPE: SIMPLE
+
+REQUESTS:
+  - FILE_TYPE : ../input/Tiny.txt
