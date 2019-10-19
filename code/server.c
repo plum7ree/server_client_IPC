@@ -424,7 +424,7 @@ int clientHandler(void *arg) {
     char *temp_storage; 
     char *outbuff;
     char from_serv_msgbuff[MSGSIZE_PRIVATE];
-    pthread_t cThread[100];
+    pthread_t cThread[MAX_FILES];
     int fileCount = 0;
     int sync_mode = 0;
 

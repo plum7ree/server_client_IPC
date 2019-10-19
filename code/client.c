@@ -7,7 +7,7 @@
 #include <sys/time.h>
 
 shm_info_array_t shm_info_array; 
-cst_t cst[100];
+cst_t cst[MAX_FILES];
 int sync_mode = 0;
 
 
@@ -239,7 +239,7 @@ void sendFile(char *path, client_mqfd_t *mqfd, client_sem_t *clsem, int filenumb
 }
 
 // return 1 if received a file, else 0
-int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char fname_array[100][FILENAMESIZE]) {
+int recvFile(client_mqfd_t *mqfd, client_sem_t *clsem, char fname_array[MAX_FILES][FILENAMESIZE]) {
 
     int filenumber;
     int status;
@@ -504,7 +504,7 @@ main(int argc, char *argv[])
 
     client_sem_t clsem;
 
-    char fname_array[100][FILENAMESIZE];
+    char fname_array[MAX_FILES][FILENAMESIZE];
     int fileCount;
     int filenumber = 0;
     char filepath[FILENAMESIZE];

@@ -56,6 +56,7 @@
 #define MAX_STORAGE 2
 #define DISCONNECT (-1)
 #define SYNC (-2)
+#define MAX_FILES 200
 //*******************************************************
 
 
