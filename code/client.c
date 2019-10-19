@@ -407,7 +407,7 @@ void writeCST(cst_t *cst, int fileCount, unsigned long segsize) {
 
     } else {
         //********************* STRESS TEST****************************
-        int nfile_per_type = 10;
+        int nfile_per_type = 20;
 
         float sum = 0;
         char csvfile[60];
@@ -426,7 +426,7 @@ void writeCST(cst_t *cst, int fileCount, unsigned long segsize) {
         // float cst_avg = 0;
         for(int i=0; i<(fileCount/nfile_per_type); i++) {
             for (int j=0; j < nfile_per_type; j++) {
-                sum += cst[i].interval;
+                sum += cst[(i*nfile_per_type + j)].interval;
             }
             sum = sum / 1000000;
             fprintf(pfile, "%.2f,%lu\n", sum, segsize);
